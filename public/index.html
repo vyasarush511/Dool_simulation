@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Poker-Dool Prototype</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="table-area" aria-label="Dool table">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Launch Prototype</p>
+            <h1 id="tableTitle">Poker-Dool</h1>
+            <div class="mode-switch" aria-label="Game mode">
+              <button id="classicModeButton" type="button" class="mode-button is-active">Classic</button>
+              <button id="pokerModeButton" type="button" class="mode-button">Poker-Dool</button>
+            </div>
+          </div>
+          <div class="score-strip">
+            <div>
+              <span>Contract</span>
+              <strong id="contractText">-</strong>
+            </div>
+            <div>
+              <span>Trump</span>
+              <strong id="trumpText">-</strong>
+            </div>
+            <div>
+              <span>Tricks</span>
+              <strong id="trickScoreText">0 - 0</strong>
+            </div>
+            <div>
+              <span>Score</span>
+              <strong id="scoreText">0 - 0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-grid">
+          <section class="seat seat-north">
+            <div class="seat-title"><span>N</span><strong id="seat-role-0">NS</strong></div>
+            <div id="hand-0" class="hand hand-horizontal"></div>
+          </section>
+
+          <section class="seat seat-west">
+            <div class="seat-title"><span>W</span><strong id="seat-role-3">EW</strong></div>
+            <div id="hand-3" class="hand hand-vertical"></div>
+          </section>
+
+          <section class="center-table">
+            <div id="currentTrick" class="current-trick"></div>
+            <div id="statusLine" class="status-line">Loading deal...</div>
+          </section>
+
+          <section class="seat seat-east">
+            <div class="seat-title"><span>E</span><strong id="seat-role-1">EW</strong></div>
+            <div id="hand-1" class="hand hand-vertical"></div>
+          </section>
+
+          <section class="seat seat-south">
+            <div class="seat-title"><span>S</span><strong id="seat-role-2">NS</strong></div>
+            <div id="hand-2" class="hand hand-horizontal"></div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel contract-panel">
+          <h2>Choose Contract</h2>
+          <div class="contract-controls">
+            <label>
+              <span>You</span>
+              <select id="humanSideSelect">
+                <option value="0">NS</option>
+                <option value="1">EW</option>
+              </select>
+            </label>
+            <label>
+              <span>Side</span>
+              <select id="declarerSelect">
+                <option value="0">NS</option>
+                <option value="1">EW</option>
+              </select>
+            </label>
+            <label>
+              <span>Number</span>
+              <select id="levelSelect">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+              </select>
+            </label>
+            <label>
+              <span>Trump</span>
+              <select id="suitSelect">
+                <option value="C">Clubs</option>
+                <option value="D">Diamonds</option>
+                <option value="H">Hearts</option>
+                <option value="S">Spades</option>
+                <option value="NT">No Trump</option>
+              </select>
+            </label>
+            <button id="startContractButton" type="button">Start</button>
+            <button id="passButton" type="button">Pass</button>
+          </div>
+        </section>
+        <section class="panel analysis-panel">
+          <h2>Bot Analysis</h2>
+          <div id="botAnalysis" class="analysis-list"></div>
+        </section>
+        <section id="pokerPanel" class="panel poker-panel is-hidden">
+          <h2>Trump Betting</h2>
+          <div class="poker-stack">
+            <div class="setup-grid">
+              <label class="poker-field">
+                <span>Game</span>
+                <select id="gameVariantSelect">
+                  <option value="36_52">36 / 52</option>
+                  <option value="24_36">24 / 36</option>
+                </select>
+              </label>
+              <label class="poker-field">
+                <span>Target Tricks</span>
+                <select id="pokerContractSelect">
+                  <option value="5">5 tricks</option>
+                  <option value="6">6 tricks</option>
+                  <option value="7">7 tricks</option>
+                  <option value="8">8 tricks</option>
+                  <option value="9">9 tricks</option>
+                  <option value="10">10 tricks</option>
+                </select>
+              </label>
+              <label class="poker-field">
+                <span>Trump</span>
+                <select id="pokerTrumpSelect">
+                  <option value="NT">No Trump</option>
+                  <option value="S">Spades</option>
+                  <option value="H">Hearts</option>
+                  <option value="D">Diamonds</option>
+                  <option value="C">Clubs</option>
+                </select>
+              </label>
+            </div>
+            <p id="variantInfoText" class="variant-note">Choose a game mode to see the deck.</p>
+            <button id="deckUniverseButton" type="button" class="secondary-button">View Deck Universe</button>
+            <div class="poker-metrics">
+              <div><span>Pot</span><strong id="pokerPotText">-</strong></div>
+              <div><span>Gross</span><strong id="pokerGrossText">-</strong></div>
+              <div><span>Next Step</span><strong id="pokerTrickText">-</strong></div>
+              <div><span>Limit</span><strong id="pokerCapText">-</strong></div>
+            </div>
+            <div class="poker-row">
+              <span>Action</span>
+              <strong id="pokerTurnText">-</strong>
+            </div>
+            <div class="share-panel">
+              <div>
+                <span>You are</span>
+                <strong id="viewerText">Player 1</strong>
+              </div>
+              <button id="copyPlayerOneLinkButton" type="button">Copy Player 1 Link</button>
+              <button id="copyPlayerTwoLinkButton" type="button">Copy Player 2 Link</button>
+            </div>
+            <button id="nextBettingRoundButton" type="button">Start Trump Betting</button>
+            <button id="readyFoldButton" type="button" class="danger-button">Ready to Fold Bid</button>
+            <p id="readyFoldHint" class="control-hint">Available when it is your turn to play a card.</p>
+          </div>
+        </section>
+        <section id="pokerAnalysisPanel" class="panel poker-analysis-panel is-hidden">
+          <h2>Hand Strength</h2>
+          <div id="pokerAnalysis" class="analysis-list"></div>
+        </section>
+        <section class="panel">
+          <h2 id="bidPanelTitle">Bidding</h2>
+          <div id="bidHistory" class="history-list"></div>
+        </section>
+        <section class="panel">
+          <h2 id="playPanelTitle">Play</h2>
+          <div id="playHistory" class="history-list compact"></div>
+        </section>
+        <section class="controls">
+          <button id="resetButton" type="button">New Deal</button>
+          <button id="newPokerHandButton" type="button" class="is-hidden">New Poker-Dool Hand</button>
+        </section>
+      </aside>
+    </main>
+
+    <section id="bettingModal" class="betting-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="bettingModalTitle">
+      <div class="betting-sheet">
+        <div class="betting-modal-top">
+          <span id="bettingStageText">Betting Window</span>
+          <h2 id="bettingModalTitle">Player to act</h2>
+        </div>
+        <div class="betting-modal-metrics">
+          <div><span>Pot</span><strong id="modalPotText">-</strong></div>
+          <div><span>To Call</span><strong id="pokerToCallText">-</strong></div>
+          <div><span>Stack</span><strong id="pokerStackText">-</strong></div>
+          <div><span>Committed</span><strong id="pokerCommitText">-</strong></div>
+        </div>
+        <div id="modalContractControls" class="modal-contract-controls">
+          <label>
+            <span>Target Tricks</span>
+            <select id="modalContractSelect">
+              <option value="5">5 tricks</option>
+              <option value="6">6 tricks</option>
+              <option value="7">7 tricks</option>
+              <option value="8">8 tricks</option>
+              <option value="9">9 tricks</option>
+              <option value="10">10 tricks</option>
+            </select>
+          </label>
+          <label>
+            <span>Trump</span>
+            <select id="modalTrumpSelect">
+              <option value="NT">No Trump</option>
+              <option value="S">Spades</option>
+              <option value="H">Hearts</option>
+              <option value="D">Diamonds</option>
+              <option value="C">Clubs</option>
+            </select>
+          </label>
+        </div>
+        <div class="betting-modal-actions">
+          <button id="checkButton" type="button">Check</button>
+          <button id="callButton" type="button">Call</button>
+          <button id="foldButton" type="button">Fold</button>
+          <button id="modalReadyFoldButton" type="button" class="danger-button">Ready to Fold Bid</button>
+          <label>
+            <span>Bet / Raise</span>
+            <input id="betAmountInput" type="number" min="10" step="10" value="20" />
+          </label>
+          <button id="betRaiseButton" type="button">Bet</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="readyFoldModal" class="betting-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="readyFoldTitle">
+      <div class="betting-sheet">
+        <div class="betting-modal-top">
+          <span>Ready to Fold</span>
+          <h2 id="readyFoldTitle">Save offer needed</h2>
+        </div>
+        <p id="readyFoldBody" class="modal-copy">A player is ready to fold unless the opponent makes a better offer.</p>
+        <div id="saveOfferControls" class="save-offer-controls">
+          <label>
+            <span>New Target</span>
+            <select id="saveOfferContractSelect"></select>
+          </label>
+          <label>
+            <span>New Trump</span>
+            <select id="saveOfferTrumpSelect">
+              <option value="NT">No Trump</option>
+              <option value="S">Spades</option>
+              <option value="H">Hearts</option>
+              <option value="D">Diamonds</option>
+              <option value="C">Clubs</option>
+            </select>
+          </label>
+          <label>
+            <span>Optional Pot Offer</span>
+            <input id="saveOfferAmountInput" type="number" min="0" step="10" value="0" />
+          </label>
+          <button id="makeSaveOfferButton" type="button">Make Bid Offer</button>
+          <button id="letFoldButton" type="button" class="danger-button">Let Them Fold</button>
+        </div>
+        <div id="acceptOfferControls" class="save-offer-controls">
+          <button id="acceptSaveOfferButton" type="button">Accept Offer</button>
+          <button id="rejectSaveOfferButton" type="button" class="danger-button">Fold</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="deckUniverseModal" class="betting-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="deckUniverseTitle">
+      <div class="betting-sheet deck-universe-sheet">
+        <div class="betting-modal-top deck-universe-top">
+          <div>
+            <span>Deck Universe</span>
+            <h2 id="deckUniverseTitle">Cards in this game</h2>
+          </div>
+          <button id="closeDeckUniverseTopButton" type="button" class="drawer-close-button" aria-label="Close deck universe">X</button>
+        </div>
+        <p id="deckUniverseBody" class="modal-copy">These are the cards that exist in this hand.</p>
+        <div id="deckUniverseGrid" class="deck-universe-grid"></div>
+        <button id="closeDeckUniverseButton" type="button">Close</button>
+      </div>
+    </section>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+structure,rounds,bettingRoundCount,avgPot,avgGrossCollected,avgTableFee,avgMaxCommitment,foldRatePct,avgFoldTrickWhenFolded,lateFoldPct,capHitPct,avgActions,avgChecks,checkOnlyRoundPct,avgTrumpLosers,avgNoTrumpWinners,avgEquitySpreadPct,structureScore
+every_trick,0|1|2|3|4|5|6|7|8|9,10,302.15,322.15,20,152.54,9.5,1.17,2.74,0,19.34,10.29,47.05,13.47,2.4,33.44,53
+alternate_trick,0|2|4|6|8,5,177.38,197.38,20,90.46,10.94,2.48,11.7,0,10.59,5.81,49.12,13.45,2.42,33.68,58
+second_half_every_trick,5|6|7|8|9,5,261.28,281.28,20,134.42,15.12,5.1,100,0,10.54,3.68,22.22,13.47,2.41,33.29,92
+second_half_alternate,5|7|9,3,166.54,186.54,20,87.88,17.78,5.42,100,0,6.43,2.3,22.91,13.53,2.39,33.48,81

@@ -1,0 +1,20 @@
+{
+  "name": "@dool/logic",
+  "version": "1.0.0",
+  "description": "core logic for the dool game",
+  "type": "module",
+  "main": "index.js",
+  "repository": "git@gitlab.com:hool-game/dool-logic.git",
+  "author": "Planet Hool <connect@planethool.org>",
+  "license": "MIT",
+  "scripts": {
+    "update:cards": "yarn add https://gitlab.com/hool-game/firtoska-cards.git",
+    "update:logic": "yarn add https://gitlab.com/hool-game/firtoska-logic.git",
+    "update": "yarn run update:cards",
+    "test": "yarn node --experimental-vm-modules $(yarn bin jest)",
+    "test:windows": "set NODE_OPTIONS=--experimental-vm-modules"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "packageManager": "yarn@1.22.19"
+}

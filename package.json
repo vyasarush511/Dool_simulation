@@ -1,0 +1,17 @@
+{
+  "name": "dool-bot-simulation",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "demo": "node src/server.js",
+    "simulate": "node src/simulate.js",
+    "analyze:cards": "node src/analysis/cardCountOdds.js",
+    "analyze:poker-dool": "node src/analysis/pokerDoolStructure.js",
+    "verify": "node src/verify.js"
+  },
+  "dependencies": {
+    "@dool/logic": "file:vendor/dool-logic",
+    "@firtoska/cards": "file:vendor/firtoska-cards",
+    "@firtoska/logic": "file:vendor/firtoska-logic"
+  }
+}

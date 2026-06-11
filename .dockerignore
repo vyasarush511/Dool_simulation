@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log
+.git
+vendor/**/.git
+vendor/**/.yarn
+vendor/**/.vscode
+vendor/**/test
+vendor/**/tests

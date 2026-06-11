@@ -1,0 +1,25 @@
+{
+  "name": "@firtoska/cards",
+  "version": "1.0.0",
+  "description": "generic library for creating card-game apps",
+  "type": "module",
+  "main": "src/index.js",
+  "repository": "git@gitlab.com:hool-game/cards.git",
+  "author": "Planet Hool <connect@planethool.org>",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0 src",
+    "prettify": "prettier . --write",
+    "test": "yarn node --experimental-vm-modules $(yarn bin jest)",
+    "build": "tsc",
+    "build:browser": "yarn browserify ./src/index.ts -p esmify -o dist/cards.browser.js"
+  },
+  "dependencies": {
+    "crypto-shuffle": "^1.0.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.20.0"
+  },
+  "packageManager": "yarn@1.22.19"
+}

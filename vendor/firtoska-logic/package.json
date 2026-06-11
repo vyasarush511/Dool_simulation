@@ -1,0 +1,21 @@
+{
+  "name": "@firtoska/logic",
+  "version": "1.0.0",
+  "description": "core logic for the firtoska family of games",
+  "type": "module",
+  "main": "index.js",
+  "repository": "git@gitlab.com:hool-game/firtoska-logic.git",
+  "author": "Planet Hool <connect@planethool.org>",
+  "license": "MIT",
+  "scripts": {
+    "update:cards": "yarn add https://gitlab.com/hool-game/firtoska-cards.git",
+    "update": "yarn run update:cards",
+    "test": "yarn node --experimental-vm-modules $(yarn bin jest)",
+    "test:windows": "set NODE_OPTIONS=--experimental-vm-modules"
+  },
+  "dependencies": {
+    "bridge-scorer": "^2.4.0"
+  },
+  "devDependencies": {},
+  "packageManager": "yarn@1.22.19"
+}
