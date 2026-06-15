@@ -66,6 +66,18 @@
         </div>
       </section>
 
+      <aside id="deckUniverseDock" class="deck-universe-dock panel is-hidden" aria-label="Live deck universe">
+        <h2>Live Universe</h2>
+        <div class="universe-dock-body">
+          <div class="universe-count-row">
+            <span>Remaining</span>
+            <strong id="deckUniverseCountText">-</strong>
+          </div>
+          <p id="deckUniverseDockBody" class="modal-copy">Cards disappear from this universe as they are played.</p>
+          <div id="deckUniverseDockGrid" class="deck-universe-grid"></div>
+        </div>
+      </aside>
+
       <aside class="side-panel">
         <section class="panel contract-panel">
           <h2>Choose Contract</h2>
@@ -148,7 +160,7 @@
               </label>
             </div>
             <p id="variantInfoText" class="variant-note">Choose a game mode to see the deck.</p>
-            <button id="deckUniverseButton" type="button" class="secondary-button">View Deck Universe</button>
+            <button id="deckUniverseButton" type="button" class="secondary-button">Expand Universe</button>
             <div class="poker-metrics">
               <div><span>Pot</span><strong id="pokerPotText">-</strong></div>
               <div><span>Gross</span><strong id="pokerGrossText">-</strong></div>

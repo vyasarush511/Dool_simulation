@@ -298,6 +298,12 @@ assert.equal(afterPlayerTwoCall.trumpSuit, "S", "accepted bid save offer should 
 const firstLegalCard = pokerRound.hands[0][0];
 const afterFirstCard = playPokerDoolCard({ sessionId: pokerRound.sessionId, player: 0, seat: 0, card: firstLegalCard });
 assert.equal(afterFirstCard.currentTrick.length, 1, "playing a legal card should add it to the current trick");
+assert.equal(
+  afterFirstCard.remainingUniverseCards.length,
+  afterPlayerTwoCall.remainingUniverseCards.length - 1,
+  "remaining universe should shrink by one after a played card",
+);
+assert.ok(!afterFirstCard.remainingUniverseCards.includes(firstLegalCard), "played cards should leave the live universe");
 assert.throws(
   () => requestPokerDoolReadyFold({ sessionId: pokerRound.sessionId, player: 1 }),
   /trump bidding/,
@@ -324,7 +330,52 @@ assert.ok(
   "later betting windows should allow folding even before a bet is made",
 );
 
+let goalSession = createPokerDoolSession({ variant: "24_36" });
+goalSession = startNextPokerDoolBettingRound({ sessionId: goalSession.sessionId });
+goalSession = settlePokerRoundWithChecks(goalSession);
+let goalGuard = 0;
+while (!goalSession.showdown && goalGuard < 80) {
+  goalGuard += 1;
+  if (goalSession.activeRound) {
+    goalSession = settlePokerRoundWithChecks(goalSession);
+    continue;
+  }
+
+  const activePlayer = goalSession.currentTurn.player;
+  const activeView = getPokerDoolSession({ sessionId: goalSession.sessionId, player: activePlayer });
+  goalSession = playPokerDoolCard({
+    sessionId: activeView.sessionId,
+    player: activePlayer,
+    seat: activeView.currentTurn.seat,
+    card: activeView.currentTurn.legalCards[0],
+  });
+}
+
+assert.ok(goalSession.goalReached, "Poker-Dool should stop as soon as a player reaches the target");
+assert.ok(goalSession.mucked, "target-reached endings should muck remaining cards");
+assert.ok(goalSession.tricksWon[goalSession.winningPlayer] >= goalSession.contractTricks, "winner should have reached the target");
+assert.ok(goalSession.tricksPlayed < goalSession.totalTricks, "target-reached endings should stop before all cards are played");
+const goalWinnerView = getPokerDoolSession({ sessionId: goalSession.sessionId, player: goalSession.winningPlayer });
+const hiddenOpponentCards = goalWinnerView.hands
+  .filter((_, seat) => seat % 2 !== goalSession.winningPlayer)
+  .flat();
+assert.ok(hiddenOpponentCards.every((card) => card === null), "mucked target stop should keep opponent cards hidden");
+
 console.log("Verification passed: bot logic, poker-Dool betting, hand evaluation, and replay summaries are valid.");
+
+function settlePokerRoundWithChecks(sessionSnapshot) {
+  let next = sessionSnapshot;
+
+  while (next.activeRound) {
+    next = applyPokerDoolHumanAction({
+      sessionId: next.sessionId,
+      player: next.pendingPlayer,
+      action: { type: "check" },
+    });
+  }
+
+  return next;
+}
 
 function tacticalDool({ seat, hand, plays, trumpSuit = undefined, contract = undefined, otherHands = {} }) {
   const players = Array.from({ length: 4 }, () => ({ hand: [] }));

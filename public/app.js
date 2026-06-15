@@ -56,6 +56,10 @@ const els = {
   gameVariantSelect: document.querySelector("#gameVariantSelect"),
   variantInfoText: document.querySelector("#variantInfoText"),
   deckUniverseButton: document.querySelector("#deckUniverseButton"),
+  deckUniverseDock: document.querySelector("#deckUniverseDock"),
+  deckUniverseCountText: document.querySelector("#deckUniverseCountText"),
+  deckUniverseDockBody: document.querySelector("#deckUniverseDockBody"),
+  deckUniverseDockGrid: document.querySelector("#deckUniverseDockGrid"),
   deckUniverseModal: document.querySelector("#deckUniverseModal"),
   deckUniverseTitle: document.querySelector("#deckUniverseTitle"),
   deckUniverseBody: document.querySelector("#deckUniverseBody"),
@@ -452,6 +456,7 @@ function renderModePanels() {
   els.analysisPanel.classList.toggle("is-hidden", isPoker);
   els.pokerPanel.classList.toggle("is-hidden", !isPoker);
   els.pokerAnalysisPanel.classList.toggle("is-hidden", !isPoker);
+  els.deckUniverseDock.classList.toggle("is-hidden", !isPoker);
   els.sidePanel.classList.toggle("is-poker", isPoker);
   if (!isPoker) els.bettingModal.classList.add("is-hidden");
   if (!isPoker) els.readyFoldModal.classList.add("is-hidden");
@@ -468,6 +473,7 @@ function renderPoker() {
   renderPokerHands();
   renderPokerCurrentTrick();
   renderPokerPanel();
+  renderDeckUniverseDock();
   renderReadyFoldModal();
   if (!els.deckUniverseModal.classList.contains("is-hidden")) renderDeckUniverseModal();
   renderPokerAnalysis();
@@ -543,7 +549,7 @@ function renderPokerPanel() {
   state.selectedVariant = poker.variant.id;
   els.gameVariantSelect.value = poker.variant.id;
   els.variantInfoText.textContent = `${poker.deckSummary} Betting rounds: ${poker.bettingRounds.map(formatRoundLabel).join(", ")}.`;
-  els.deckUniverseButton.textContent = `View ${poker.totalDeckCards}-Card Universe`;
+  els.deckUniverseButton.textContent = `Expand Universe (${remainingUniverseCount(poker)}/${poker.totalDeckCards})`;
   els.pokerPotText.textContent = poker.betting.pot;
   els.pokerGrossText.textContent = poker.betting.grossCollected;
   els.pokerTrickText.textContent = poker.activeRound ? "Betting now" : nextStepLabel(poker);
@@ -591,7 +597,7 @@ function renderPokerPanel() {
   els.betRaiseButton.textContent = isPreflopBetting(poker) || betRaise?.type === "raise" ? "Raise" : "Bet";
   els.betAmountInput.disabled = state.busy || !betRaise;
   els.newPokerHandButton.disabled = state.busy;
-  els.deckUniverseButton.disabled = state.busy || !poker.deckUniverseCards?.length;
+  els.deckUniverseButton.disabled = state.busy || !remainingUniverseCards(poker).length;
 
   if (betRaise) {
     els.betAmountInput.min = betRaise.min;
@@ -638,7 +644,7 @@ function renderReadyFoldModal() {
 }
 
 function openDeckUniverseModal() {
-  if (!state.poker?.deckUniverseCards?.length) return;
+  if (!remainingUniverseCards(state.poker).length) return;
 
   els.deckUniverseModal.classList.remove("is-hidden");
   renderDeckUniverseModal();
@@ -650,13 +656,22 @@ function closeDeckUniverseModal() {
 
 function renderDeckUniverseModal() {
   const poker = state.poker;
-  const cards = poker.deckUniverseCards ?? [];
-  els.deckUniverseTitle.textContent = `${poker.variant.label} Deck Universe`;
-  els.deckUniverseBody.textContent =
-    poker.variant.id === "24_36"
-      ? "This hand's 36-card universe was randomly sampled from the full 52-card deck. Only these cards can appear in the deal."
-      : "This game uses the full 52-card universe. Dealt cards and hidden cards both come from this set.";
-  els.deckUniverseGrid.innerHTML = "";
+  const cards = remainingUniverseCards(poker);
+  els.deckUniverseTitle.textContent = `${poker.variant.label} Remaining Universe`;
+  els.deckUniverseBody.textContent = universeBodyText(poker);
+  renderDeckUniverseCards(els.deckUniverseGrid, cards);
+}
+
+function renderDeckUniverseDock() {
+  const poker = state.poker;
+  const cards = remainingUniverseCards(poker);
+  els.deckUniverseCountText.textContent = `${cards.length} / ${poker.totalDeckCards}`;
+  els.deckUniverseDockBody.textContent = universeBodyText(poker);
+  renderDeckUniverseCards(els.deckUniverseDockGrid, cards);
+}
+
+function renderDeckUniverseCards(gridEl, cards) {
+  gridEl.innerHTML = "";
 
   for (const suit of ["S", "H", "D", "C"]) {
     const group = document.createElement("section");
@@ -670,8 +685,25 @@ function renderDeckUniverseModal() {
       row.append(cardElement(parseCard(label), { seat: null, isLegal: false }));
     }
     group.append(row);
-    els.deckUniverseGrid.append(group);
+    gridEl.append(group);
   }
+}
+
+function universeBodyText(poker) {
+  const played = poker.playedUniverseCards?.length ?? 0;
+  const source =
+    poker.variant.id === "24_36"
+      ? "Random 36-card universe from the full deck."
+      : "Full 52-card universe.";
+  return `${source} ${played} played card${played === 1 ? "" : "s"} removed live.`;
+}
+
+function remainingUniverseCards(poker) {
+  return poker?.remainingUniverseCards ?? poker?.deckUniverseCards ?? [];
+}
+
+function remainingUniverseCount(poker) {
+  return remainingUniverseCards(poker).length;
 }
 
 function renderPokerAnalysis() {
@@ -702,7 +734,11 @@ function renderPokerHistory() {
   els.playHistory.append(historyRow(`${state.poker.totalCards}/${state.poker.totalDeckCards}: ${state.poker.cardsPerSeat} cards per hand, ${state.poker.deadCards} hidden`));
   els.playHistory.append(historyRow(state.poker.deckSummary));
   els.playHistory.append(historyRow(`You can only see ${state.poker.viewerName}'s cards`));
-  els.playHistory.append(historyRow(state.poker.folded ? "Hand ended by fold" : "System opens betting windows when needed"));
+  if (state.poker.goalReached) {
+    els.playHistory.append(historyRow(`Goal reached; remaining cards mucked`));
+  } else {
+    els.playHistory.append(historyRow(state.poker.folded ? "Hand ended by fold" : "System opens betting windows when needed"));
+  }
 }
 
 function renderPokerStatus() {

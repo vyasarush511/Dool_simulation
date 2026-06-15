@@ -11,7 +11,7 @@ import {
 } from "./bettingRules.js";
 import { dealPartialDeck, gameVariant, POKER_DOOL_VARIANTS } from "./deck.js";
 import { estimateSideEquities, evaluatePokerDoolSide, minimumContractForTricks } from "./handEvaluation.js";
-import { createReplayLog, recordReplayEvent, summarizeReplay } from "./replayLog.js";
+import { createReplayLog, muckCards, recordReplayEvent, summarizeReplay } from "./replayLog.js";
 
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60;
@@ -87,6 +87,9 @@ function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), vari
     folded: false,
     foldNegotiation: null,
     showdown: false,
+    goalReached: false,
+    winningPlayer: null,
+    mucked: false,
     playStarted: false,
     currentSeat: null,
     leaderSeat: 0,
@@ -491,8 +494,14 @@ function completeCurrentTrick(session) {
   session.currentSeat = winningPlay.seat;
   recordReplayEvent(session.replay, { type: "take", seat: winningPlay.seat, trick: session.tricksPlayed });
 
+  if (session.tricksWon[winningSide] >= session.contractTricks) {
+    finalizeGoalReached(session, winningSide);
+    return;
+  }
+
   if (session.tricksPlayed >= session.totalTricks) {
     session.showdown = true;
+    session.winningPlayer = session.tricksWon[0] === session.tricksWon[1] ? null : Number(session.tricksWon[1] > session.tricksWon[0]);
     session.currentSeat = null;
     recordReplayEvent(session.replay, { type: "showdown" });
     return;
@@ -502,6 +511,24 @@ function completeCurrentTrick(session) {
   if (nextBettingTrick === session.tricksPlayed) {
     openBettingRound(session, nextBettingTrick, winningSide);
   }
+}
+
+function finalizeGoalReached(session, winningPlayer) {
+  session.showdown = true;
+  session.goalReached = true;
+  session.winningPlayer = winningPlayer;
+  session.mucked = true;
+  session.activeRound = false;
+  session.pendingPlayer = null;
+  session.currentSeat = null;
+  recordReplayEvent(session.replay, {
+    type: "goal_reached",
+    player: winningPlayer,
+    target: session.contractTricks,
+    trick: session.tricksPlayed,
+  });
+  muckCards(session.replay, { player: 0, reason: "target-reached" });
+  muckCards(session.replay, { player: 1, reason: "target-reached" });
 }
 
 function finalizeFold(session, foldedPlayer, { reason }) {
@@ -539,6 +566,7 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
   const nextTrick = session.bettingRounds[session.nextRoundIndex] ?? null;
   const activePlayer = session.pendingPlayer;
   const currentTurn = currentTurnForViewer(session, cleanViewer);
+  const remainingUniverseCards = remainingCardsFromUniverse(session);
 
   return {
     sessionId: session.id,
@@ -562,6 +590,8 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
     deadCards: session.deadCards.length,
     deckSummary: session.variant.deckSummary,
     deckUniverseCards: session.deckUniverseCards.map(cardLabel),
+    remainingUniverseCards,
+    playedUniverseCards: playedCardLabels(session),
     totalTricks: session.totalTricks,
     minimumContract: minimumContractForTricks(session.totalTricks),
     contractTricks: session.contractTricks,
@@ -575,6 +605,9 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
     folded: session.folded,
     foldNegotiation: describeFoldNegotiation(session, cleanViewer),
     showdown: session.showdown,
+    goalReached: session.goalReached,
+    winningPlayer: session.winningPlayer,
+    mucked: session.mucked,
     playStarted: session.playStarted,
     currentSeat: session.currentSeat,
     currentTrick: session.currentTrick.map((play) => ({ seat: play.seat, player: sideForSeat(play.seat), card: cardLabel(play.card) })),
@@ -674,7 +707,7 @@ function describeFoldNegotiation(session, viewerPlayer) {
 
 function visibleHands(session, viewerPlayer) {
   return session.hands.map((hand, seat) => {
-    if (session.showdown || session.folded || sideForSeat(seat) === viewerPlayer) {
+    if ((session.showdown && !session.mucked) || session.folded || sideForSeat(seat) === viewerPlayer) {
       return hand.map(cardLabel);
     }
 
@@ -686,6 +719,10 @@ function makeMessage(session) {
   if (session.folded) {
     const winner = session.betting.folded[0] ? 1 : 0;
     return `${session.players[winner]} wins the pot after a fold.`;
+  }
+
+  if (session.goalReached) {
+    return `${session.players[session.winningPlayer]} reached ${session.contractTricks} tricks. Remaining cards are mucked.`;
   }
 
   if (session.showdown) {
@@ -758,6 +795,15 @@ function maxSaveOffer(session, player) {
   const capRemaining = Math.max(0, cap - session.betting.committed[player]);
   const potRemaining = Math.max(0, session.rules.maxPot - session.betting.pot);
   return Math.max(0, Math.min(capRemaining, potRemaining, session.betting.stacks[player]));
+}
+
+function remainingCardsFromUniverse(session) {
+  const played = new Set(playedCardLabels(session));
+  return session.deckUniverseCards.map(cardLabel).filter((label) => !played.has(label));
+}
+
+function playedCardLabels(session) {
+  return session.replay.events.filter((event) => event.type === "card").map((event) => event.card);
 }
 
 function legalCardsForSeat(session, seat) {
