@@ -15,7 +15,9 @@ const state = {
   mode: "poker",
   viewerPlayer: readViewerPlayer(),
   selectedVariant: new URLSearchParams(window.location.search).get("variant") ?? "36_52",
+  selectedDealStyle: new URLSearchParams(window.location.search).get("deal") ?? "standard",
   pokerSessionId: new URLSearchParams(window.location.search).get("room"),
+  selectedTrickNumber: null,
   busy: false,
 };
 
@@ -54,12 +56,14 @@ const els = {
   pokerCapText: document.querySelector("#pokerCapText"),
   pokerTurnText: document.querySelector("#pokerTurnText"),
   gameVariantSelect: document.querySelector("#gameVariantSelect"),
+  dealStyleSelect: document.querySelector("#dealStyleSelect"),
   variantInfoText: document.querySelector("#variantInfoText"),
   deckUniverseButton: document.querySelector("#deckUniverseButton"),
   deckUniverseDock: document.querySelector("#deckUniverseDock"),
   deckUniverseCountText: document.querySelector("#deckUniverseCountText"),
   deckUniverseDockBody: document.querySelector("#deckUniverseDockBody"),
   deckUniverseDockGrid: document.querySelector("#deckUniverseDockGrid"),
+  trickHistoryList: document.querySelector("#trickHistoryList"),
   deckUniverseModal: document.querySelector("#deckUniverseModal"),
   deckUniverseTitle: document.querySelector("#deckUniverseTitle"),
   deckUniverseBody: document.querySelector("#deckUniverseBody"),
@@ -94,6 +98,8 @@ const els = {
   readyFoldTitle: document.querySelector("#readyFoldTitle"),
   readyFoldBody: document.querySelector("#readyFoldBody"),
   saveOfferControls: document.querySelector("#saveOfferControls"),
+  saveOfferContractField: document.querySelector("#saveOfferContractField"),
+  saveOfferTrumpField: document.querySelector("#saveOfferTrumpField"),
   saveOfferContractSelect: document.querySelector("#saveOfferContractSelect"),
   saveOfferTrumpSelect: document.querySelector("#saveOfferTrumpSelect"),
   saveOfferAmountInput: document.querySelector("#saveOfferAmountInput"),
@@ -102,6 +108,12 @@ const els = {
   acceptOfferControls: document.querySelector("#acceptOfferControls"),
   acceptSaveOfferButton: document.querySelector("#acceptSaveOfferButton"),
   rejectSaveOfferButton: document.querySelector("#rejectSaveOfferButton"),
+  trickDetailModal: document.querySelector("#trickDetailModal"),
+  trickDetailTitle: document.querySelector("#trickDetailTitle"),
+  trickDetailBody: document.querySelector("#trickDetailBody"),
+  trickDetailCards: document.querySelector("#trickDetailCards"),
+  closeTrickDetailButton: document.querySelector("#closeTrickDetailButton"),
+  closeTrickDetailTopButton: document.querySelector("#closeTrickDetailTopButton"),
 };
 
 els.classicModeButton.addEventListener("click", () => setMode("classic"));
@@ -113,9 +125,12 @@ els.passButton.addEventListener("click", () => passToBot());
 els.humanSideSelect.addEventListener("change", () => createNewSession());
 els.nextBettingRoundButton.addEventListener("click", () => startNextBettingRound());
 els.gameVariantSelect.addEventListener("change", () => changePokerVariant());
+els.dealStyleSelect.addEventListener("change", () => changeDealStyle());
 els.deckUniverseButton.addEventListener("click", () => openDeckUniverseModal());
 els.closeDeckUniverseButton.addEventListener("click", () => closeDeckUniverseModal());
 els.closeDeckUniverseTopButton.addEventListener("click", () => closeDeckUniverseModal());
+els.closeTrickDetailButton.addEventListener("click", () => closeTrickDetailModal());
+els.closeTrickDetailTopButton.addEventListener("click", () => closeTrickDetailModal());
 els.pokerContractSelect.addEventListener("change", () => setPokerContract());
 els.pokerTrumpSelect.addEventListener("change", () => setPokerContract());
 els.copyPlayerOneLinkButton.addEventListener("click", () => copyShareLink(0));
@@ -143,10 +158,14 @@ els.acceptSaveOfferButton.addEventListener("click", () => sendReadyFoldResponse(
 els.rejectSaveOfferButton.addEventListener("click", () => sendReadyFoldResponse({ action: "fold" }));
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeDeckUniverseModal();
+  if (event.key === "Escape") {
+    closeDeckUniverseModal();
+    closeTrickDetailModal();
+  }
 });
 
 els.gameVariantSelect.value = state.selectedVariant;
+els.dealStyleSelect.value = state.selectedDealStyle;
 
 if (state.mode === "poker") {
   if (state.pokerSessionId) {
@@ -194,7 +213,12 @@ async function createPokerSession() {
   await runRequest(async () => {
     state.viewerPlayer = 0;
     state.selectedVariant = els.gameVariantSelect.value || state.selectedVariant;
-    state.poker = await postJson("/api/poker-dool/new", { player: state.viewerPlayer, variant: state.selectedVariant });
+    state.selectedDealStyle = els.dealStyleSelect.value || state.selectedDealStyle;
+    state.poker = await postJson("/api/poker-dool/new", {
+      player: state.viewerPlayer,
+      variant: state.selectedVariant,
+      dealStyle: state.selectedDealStyle,
+    });
     state.pokerSessionId = state.poker.sessionId;
     updatePokerUrl();
   });
@@ -208,10 +232,12 @@ async function redealPokerSession() {
 
   await runRequest(async () => {
     state.selectedVariant = els.gameVariantSelect.value || state.selectedVariant;
+    state.selectedDealStyle = els.dealStyleSelect.value || state.selectedDealStyle;
     state.poker = await postJson("/api/poker-dool/redeal", {
       sessionId: state.pokerSessionId,
       player: state.viewerPlayer,
       variant: state.selectedVariant,
+      dealStyle: state.selectedDealStyle,
     });
     state.pokerSessionId = state.poker.sessionId;
     updatePokerUrl();
@@ -277,6 +303,11 @@ async function startNextBettingRound() {
 
 async function changePokerVariant() {
   state.selectedVariant = els.gameVariantSelect.value;
+  await redealPokerSession();
+}
+
+async function changeDealStyle() {
+  state.selectedDealStyle = els.dealStyleSelect.value;
   await redealPokerSession();
 }
 
@@ -414,6 +445,7 @@ function setBusy(busy) {
   els.deckUniverseButton.disabled = busy;
   els.modalReadyFoldButton.disabled = busy;
   els.gameVariantSelect.disabled = busy;
+  els.dealStyleSelect.disabled = busy;
   els.pokerContractSelect.disabled = busy;
   els.pokerTrumpSelect.disabled = busy;
   els.checkButton.disabled = busy;
@@ -474,6 +506,8 @@ function renderPoker() {
   renderPokerCurrentTrick();
   renderPokerPanel();
   renderDeckUniverseDock();
+  renderTrickHistory();
+  renderTrickDetailModal();
   renderReadyFoldModal();
   if (!els.deckUniverseModal.classList.contains("is-hidden")) renderDeckUniverseModal();
   renderPokerAnalysis();
@@ -528,7 +562,7 @@ function renderPokerCurrentTrick() {
     </div>
   `;
 
-  for (const play of state.poker.currentTrick) {
+  for (const play of state.poker.tableTrick ?? state.poker.currentTrick) {
     const cardEl = cardElement(parseCard(play.card), { seat: play.seat, isLegal: false });
     cardEl.classList.add("played-card", `seat-${actualToVisualSeat(play.seat)}`);
     els.currentTrick.append(cardEl);
@@ -547,8 +581,10 @@ function renderPokerPanel() {
   syncContractOptions(els.modalContractSelect, poker.minimumContract, poker.totalTricks);
   syncContractOptions(els.saveOfferContractSelect, poker.minimumContract, poker.totalTricks);
   state.selectedVariant = poker.variant.id;
+  state.selectedDealStyle = poker.dealStyle?.id ?? state.selectedDealStyle;
   els.gameVariantSelect.value = poker.variant.id;
-  els.variantInfoText.textContent = `${poker.deckSummary} Betting rounds: ${poker.bettingRounds.map(formatRoundLabel).join(", ")}.`;
+  els.dealStyleSelect.value = state.selectedDealStyle;
+  els.variantInfoText.textContent = `${poker.deckSummary} Deal: ${poker.dealStyle?.label ?? "Standard"}${poker.dealPattern?.length ? ` (${poker.dealPattern.join("-")})` : ""}. Betting rounds: ${poker.bettingRounds.map(formatRoundLabel).join(", ")}.`;
   els.deckUniverseButton.textContent = `Expand Universe (${remainingUniverseCount(poker)}/${poker.totalDeckCards})`;
   els.pokerPotText.textContent = poker.betting.pot;
   els.pokerGrossText.textContent = poker.betting.grossCollected;
@@ -563,6 +599,8 @@ function renderPokerPanel() {
   els.saveOfferContractSelect.value = String(poker.contractTricks);
   els.saveOfferTrumpSelect.value = poker.trumpSuit;
   els.gameVariantSelect.disabled =
+    state.busy || state.viewerPlayer !== 0 || poker.activeRound || poker.nextRoundIndex > 0 || poker.folded || poker.showdown;
+  els.dealStyleSelect.disabled =
     state.busy || state.viewerPlayer !== 0 || poker.activeRound || poker.nextRoundIndex > 0 || poker.folded || poker.showdown;
   els.pokerContractSelect.disabled =
     state.busy || state.viewerPlayer !== 0 || poker.activeRound || poker.nextRoundIndex > 0 || poker.folded || poker.showdown;
@@ -585,7 +623,7 @@ function renderPokerPanel() {
   const canReadyFold = canUseReadyFold(poker);
   els.readyFoldButton.disabled = state.busy || !canReadyFold;
   els.modalReadyFoldButton.disabled = state.busy || !canReadyFold;
-  els.modalReadyFoldButton.classList.toggle("is-hidden", !isPreflopBetting(poker));
+  els.modalReadyFoldButton.classList.toggle("is-hidden", false);
   els.readyFoldHint.textContent = readyFoldHint(poker);
   els.checkButton.disabled = state.busy || !legalTypes.has("check");
   els.checkButton.textContent = isPreflopBetting(poker) ? "Pass" : "Check";
@@ -616,10 +654,15 @@ function renderReadyFoldModal() {
   if (!showModal) return;
 
   if (negotiation.status === "awaiting_offer" && negotiation.isResponder) {
-    els.readyFoldTitle.textContent = `${negotiation.requesterName} may fold the bid`;
-    els.readyFoldBody.textContent = `Offer a new target/trump to keep ${negotiation.requesterName} in the hand, or let them fold now.`;
+    const isTrumpBid = negotiation.phase === "trump_bidding";
+    els.readyFoldTitle.textContent = `${negotiation.requesterName} may fold`;
+    els.readyFoldBody.textContent = isTrumpBid
+      ? `Offer a new target/trump to keep ${negotiation.requesterName} in the hand, or let them fold now.`
+      : `Offer chips into the pot to keep ${negotiation.requesterName} in this betting round, or let them fold now.`;
     els.saveOfferControls.classList.remove("is-hidden");
     els.acceptOfferControls.classList.add("is-hidden");
+    els.saveOfferContractField.classList.toggle("is-hidden", !isTrumpBid);
+    els.saveOfferTrumpField.classList.toggle("is-hidden", !isTrumpBid);
     els.saveOfferContractSelect.value = String(negotiation.proposedContractTricks ?? state.poker.contractTricks);
     els.saveOfferTrumpSelect.value = negotiation.proposedTrumpSuit ?? state.poker.trumpSuit;
     els.saveOfferAmountInput.min = 0;
@@ -627,6 +670,7 @@ function renderReadyFoldModal() {
     if (Number(els.saveOfferAmountInput.value) < 0 || Number(els.saveOfferAmountInput.value) > negotiation.maxOffer) {
       els.saveOfferAmountInput.value = 0;
     }
+    els.makeSaveOfferButton.textContent = isTrumpBid ? "Make Bid Offer" : "Make Continue Offer";
     els.makeSaveOfferButton.disabled = state.busy;
     els.letFoldButton.disabled = state.busy;
     return;
@@ -634,8 +678,13 @@ function renderReadyFoldModal() {
 
   if (negotiation.status === "awaiting_accept" && negotiation.isRequester) {
     const potOfferText = negotiation.offerAmount > 0 ? ` plus ${negotiation.offerAmount} into the pot` : "";
-    els.readyFoldTitle.textContent = `${negotiation.responderName} offers ${negotiation.proposedContractTricks} with ${formatTrump(negotiation.proposedTrumpSuit)}`;
-    els.readyFoldBody.textContent = `Accept this trump bid${potOfferText}, or fold the hand now.`;
+    if (negotiation.phase === "trump_bidding") {
+      els.readyFoldTitle.textContent = `${negotiation.responderName} offers ${negotiation.proposedContractTricks} with ${formatTrump(negotiation.proposedTrumpSuit)}`;
+      els.readyFoldBody.textContent = `Accept this trump bid${potOfferText}, or fold the hand now.`;
+    } else {
+      els.readyFoldTitle.textContent = `${negotiation.responderName} offers to continue`;
+      els.readyFoldBody.textContent = `Accept${potOfferText || " this continue offer"}, or fold the hand now.`;
+    }
     els.saveOfferControls.classList.add("is-hidden");
     els.acceptOfferControls.classList.remove("is-hidden");
     els.acceptSaveOfferButton.disabled = state.busy;
@@ -652,6 +701,17 @@ function openDeckUniverseModal() {
 
 function closeDeckUniverseModal() {
   els.deckUniverseModal.classList.add("is-hidden");
+}
+
+function openTrickDetailModal(trickNumber) {
+  state.selectedTrickNumber = Number(trickNumber);
+  els.trickDetailModal.classList.remove("is-hidden");
+  renderTrickDetailModal();
+}
+
+function closeTrickDetailModal() {
+  state.selectedTrickNumber = null;
+  els.trickDetailModal.classList.add("is-hidden");
 }
 
 function renderDeckUniverseModal() {
@@ -686,6 +746,54 @@ function renderDeckUniverseCards(gridEl, cards) {
     }
     group.append(row);
     gridEl.append(group);
+  }
+}
+
+function renderTrickHistory() {
+  const tricks = state.poker.completedTricks ?? [];
+  els.trickHistoryList.innerHTML = "";
+
+  if (tricks.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "trick-history-empty";
+    empty.textContent = "No completed tricks yet.";
+    els.trickHistoryList.append(empty);
+    return;
+  }
+
+  for (const trick of [...tricks].reverse()) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "trick-history-row";
+    row.innerHTML = `
+      <span>Trick ${trick.trick}</span>
+      <strong>${state.poker.players[trick.winnerPlayer]} via ${seatLabels[trick.winnerSeat]}</strong>
+      <small>${trick.cards.map((play) => `${seatLabels[play.seat]} ${play.card}`).join(" | ")}</small>
+    `;
+    row.addEventListener("click", () => openTrickDetailModal(trick.trick));
+    els.trickHistoryList.append(row);
+  }
+}
+
+function renderTrickDetailModal() {
+  if (els.trickDetailModal.classList.contains("is-hidden")) return;
+
+  const trick = (state.poker.completedTricks ?? []).find((candidate) => candidate.trick === state.selectedTrickNumber);
+  if (!trick) {
+    closeTrickDetailModal();
+    return;
+  }
+
+  els.trickDetailTitle.textContent = `Trick ${trick.trick}`;
+  els.trickDetailBody.textContent = `${state.poker.players[trick.winnerPlayer]} won from ${seatLabels[trick.winnerSeat]}.`;
+  els.trickDetailCards.innerHTML = "";
+
+  for (const play of trick.cards) {
+    const item = document.createElement("div");
+    item.className = "trick-detail-card";
+    item.innerHTML = `<span>${seatLabels[play.seat]}</span>`;
+    item.append(cardElement(parseCard(play.card), { seat: play.seat, isLegal: false }));
+    els.trickDetailCards.append(item);
   }
 }
 
@@ -892,10 +1000,13 @@ function formatPokerEvent(event) {
   if (event.type === "bet") return `${player}bets ${event.amount}`;
   if (event.type === "call") return `${player}calls ${event.amount}`;
   if (event.type === "raise") return `${player}raises ${event.raiseBy}`;
-  if (event.type === "ready_fold_bid") return `${player}is ready to fold the trump bid`;
+  if (event.type === "ready_fold_bid") {
+    return event.phase === "trump_bidding" ? `${player}is ready to fold the trump bid` : `${player}is ready to fold this betting window`;
+  }
   if (event.type === "bid_save_offer") {
     const chipText = event.amount > 0 ? ` + ${event.amount}` : "";
-    return `${player}offers ${event.contractTricks} with ${formatTrump(event.trumpSuit)}${chipText}`;
+    if (event.phase === "trump_bidding") return `${player}offers ${event.contractTricks} with ${formatTrump(event.trumpSuit)}${chipText}`;
+    return `${player}offers continue${chipText}`;
   }
   if (event.type === "bid_save_offer_paid") return `${player}adds save offer ${event.amount}`;
   if (event.type === "save_offer") return `${player}offers ${event.amount} to continue`;
@@ -965,7 +1076,6 @@ function canUseReadyFold(poker) {
   return (
     poker.currentTurn?.type === "betting" &&
     poker.currentTurn.isViewer &&
-    isPreflopBetting(poker) &&
     !poker.foldNegotiation &&
     !poker.folded &&
     !poker.showdown
@@ -973,12 +1083,12 @@ function canUseReadyFold(poker) {
 }
 
 function readyFoldHint(poker) {
-  if (poker.foldNegotiation) return "A trump-bid save offer is already open.";
+  if (poker.foldNegotiation) return "A save offer is already open.";
   if (poker.folded || poker.showdown) return "Start a new hand to use Ready to Fold.";
-  if (!isPreflopBetting(poker)) return "Only available during trump bidding.";
-  if (poker.currentTurn?.type !== "betting") return "Available during the trump-bidding popup.";
-  if (!poker.currentTurn.isViewer) return "Available on your own trump-bidding turn.";
-  return "Ask the opponent for a new target/trump before you fold.";
+  if (poker.currentTurn?.type !== "betting") return "Available during a betting popup.";
+  if (!poker.currentTurn.isViewer) return "Available on your own betting turn.";
+  if (isPreflopBetting(poker)) return "Ask for a new target/trump before you fold.";
+  return "Ask for a continue offer before you fold this betting round.";
 }
 
 function isPreflopBetting(poker) {
@@ -1006,6 +1116,7 @@ function shareLink(player) {
   url.searchParams.set("room", state.pokerSessionId ?? state.poker?.sessionId ?? "");
   url.searchParams.set("player", String(player));
   url.searchParams.set("variant", state.poker?.variant?.id ?? state.selectedVariant);
+  url.searchParams.set("deal", state.poker?.dealStyle?.id ?? state.selectedDealStyle);
   return url.toString();
 }
 

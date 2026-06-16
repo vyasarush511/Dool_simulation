@@ -75,6 +75,10 @@
           </div>
           <p id="deckUniverseDockBody" class="modal-copy">Cards disappear from this universe as they are played.</p>
           <div id="deckUniverseDockGrid" class="deck-universe-grid"></div>
+          <div class="trick-history-dock">
+            <div class="dock-subhead">Tricks Played</div>
+            <div id="trickHistoryList" class="trick-history-list"></div>
+          </div>
         </div>
       </aside>
 
@@ -138,6 +142,13 @@
                 </select>
               </label>
               <label class="poker-field">
+                <span>Deal</span>
+                <select id="dealStyleSelect">
+                  <option value="standard">Standard</option>
+                  <option value="goulash">Goulash</option>
+                </select>
+              </label>
+              <label class="poker-field">
                 <span>Target Tricks</span>
                 <select id="pokerContractSelect">
                   <option value="5">5 tricks</option>
@@ -180,8 +191,8 @@
               <button id="copyPlayerTwoLinkButton" type="button">Copy Player 2 Link</button>
             </div>
             <button id="nextBettingRoundButton" type="button">Start Trump Betting</button>
-            <button id="readyFoldButton" type="button" class="danger-button">Ready to Fold Bid</button>
-            <p id="readyFoldHint" class="control-hint">Available when it is your turn to play a card.</p>
+            <button id="readyFoldButton" type="button" class="danger-button">Ready to Fold</button>
+            <p id="readyFoldHint" class="control-hint">Available during your betting turn.</p>
           </div>
         </section>
         <section id="pokerAnalysisPanel" class="panel poker-analysis-panel is-hidden">
@@ -242,7 +253,7 @@
           <button id="checkButton" type="button">Check</button>
           <button id="callButton" type="button">Call</button>
           <button id="foldButton" type="button">Fold</button>
-          <button id="modalReadyFoldButton" type="button" class="danger-button">Ready to Fold Bid</button>
+          <button id="modalReadyFoldButton" type="button" class="danger-button">Ready to Fold</button>
           <label>
             <span>Bet / Raise</span>
             <input id="betAmountInput" type="number" min="10" step="10" value="20" />
@@ -260,11 +271,11 @@
         </div>
         <p id="readyFoldBody" class="modal-copy">A player is ready to fold unless the opponent makes a better offer.</p>
         <div id="saveOfferControls" class="save-offer-controls">
-          <label>
+          <label id="saveOfferContractField">
             <span>New Target</span>
             <select id="saveOfferContractSelect"></select>
           </label>
-          <label>
+          <label id="saveOfferTrumpField">
             <span>New Trump</span>
             <select id="saveOfferTrumpSelect">
               <option value="NT">No Trump</option>
@@ -278,7 +289,7 @@
             <span>Optional Pot Offer</span>
             <input id="saveOfferAmountInput" type="number" min="0" step="10" value="0" />
           </label>
-          <button id="makeSaveOfferButton" type="button">Make Bid Offer</button>
+          <button id="makeSaveOfferButton" type="button">Make Continue Offer</button>
           <button id="letFoldButton" type="button" class="danger-button">Let Them Fold</button>
         </div>
         <div id="acceptOfferControls" class="save-offer-controls">
@@ -300,6 +311,21 @@
         <p id="deckUniverseBody" class="modal-copy">These are the cards that exist in this hand.</p>
         <div id="deckUniverseGrid" class="deck-universe-grid"></div>
         <button id="closeDeckUniverseButton" type="button">Close</button>
+      </div>
+    </section>
+
+    <section id="trickDetailModal" class="betting-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="trickDetailTitle">
+      <div class="betting-sheet trick-detail-sheet">
+        <div class="betting-modal-top deck-universe-top">
+          <div>
+            <span>Trick Review</span>
+            <h2 id="trickDetailTitle">Trick</h2>
+          </div>
+          <button id="closeTrickDetailTopButton" type="button" class="drawer-close-button" aria-label="Close trick detail">X</button>
+        </div>
+        <p id="trickDetailBody" class="modal-copy">Cards played in this trick.</p>
+        <div id="trickDetailCards" class="trick-detail-cards"></div>
+        <button id="closeTrickDetailButton" type="button">Close</button>
       </div>
     </section>
 

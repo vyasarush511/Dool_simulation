@@ -11,6 +11,7 @@ import {
 } from "./game/interactiveSession.js";
 import { runTwoSideGame } from "./game/twoSideSimulation.js";
 import { applyBettingAction, beginBettingRound, grossCollected, startBettingHand } from "./pokerDool/bettingRules.js";
+import { dealPartialDeck, seededRandom } from "./pokerDool/deck.js";
 import { countNoTrumpWinners, countTrumpLosers, minimumContractForTricks } from "./pokerDool/handEvaluation.js";
 import { createReplayLog, exposeCards, muckCards, summarizeReplay } from "./pokerDool/replayLog.js";
 import {
@@ -252,10 +253,16 @@ assert.ok(
   [...shortDeckSession.hands[0], ...shortDeckSession.hands[2]].every((label) => shortDeckSession.deckUniverseCards.includes(label)),
   "visible 24/36 cards should come from the sampled universe",
 );
+const goulashDeal = dealPartialDeck({ variant: "36_52", dealStyle: "goulash", rng: seededRandom(7) });
+assert.equal(goulashDeal.dealStyle.id, "goulash", "goulash deal should record its deal style");
+assert.equal(goulashDeal.dealPattern.reduce((sum, value) => sum + value, 0), 9, "36/52 goulash packets should sum to hand length");
+assert.equal(goulashDeal.hands.every((hand) => hand.length === 9), true, "goulash should deal equal hand sizes");
+assert.ok(goulashDeal.hands.some((hand) => largestSuitCount(hand) >= 5), "goulash should produce at least one skewed suit shape");
 const redealProbe = createPokerDoolSession({ variant: "36_52" });
-const redealtShortDeck = redealPokerDoolSession({ sessionId: redealProbe.sessionId, player: 0, variant: "24_36" });
+const redealtShortDeck = redealPokerDoolSession({ sessionId: redealProbe.sessionId, player: 0, variant: "24_36", dealStyle: "goulash" });
 assert.equal(redealtShortDeck.sessionId, redealProbe.sessionId, "shared redeal should keep the same room id");
 assert.equal(redealtShortDeck.variant.id, "24_36", "shared redeal should update the room variant");
+assert.equal(redealtShortDeck.dealStyle.id, "goulash", "shared redeal should update the room deal style");
 assert.equal(redealtShortDeck.totalCards, 24, "shared redeal should replace the hand for the same room");
 pokerSession = setPokerDoolTrump({ sessionId: pokerSession.sessionId, trumpSuit: "S" });
 assert.equal(pokerSession.trumpSuit, "S", "Poker-Dool session should allow trump selection before preflop");
@@ -306,7 +313,7 @@ assert.equal(
 assert.ok(!afterFirstCard.remainingUniverseCards.includes(firstLegalCard), "played cards should leave the live universe");
 assert.throws(
   () => requestPokerDoolReadyFold({ sessionId: pokerRound.sessionId, player: 1 }),
-  /trump bidding/,
+  /betting window/,
   "ready-to-fold should not be available during card play",
 );
 
@@ -329,6 +336,24 @@ assert.ok(
   laterBetSession.activeActions.some((action) => action.type === "fold"),
   "later betting windows should allow folding even before a bet is made",
 );
+assert.equal(laterBetSession.completedTricks.length, 2, "completed tricks should be available for trick review");
+assert.equal(laterBetSession.tableTrick.length, 4, "the just-completed trick should remain visible briefly");
+const laterReadyFold = requestPokerDoolReadyFold({ sessionId: laterBetSession.sessionId, player: laterBetSession.pendingPlayer });
+assert.equal(laterReadyFold.foldNegotiation.phase, "betting_window", "ready-to-fold should work in later betting windows");
+const laterContinueOffer = respondPokerDoolReadyFold({
+  sessionId: laterBetSession.sessionId,
+  player: laterReadyFold.foldNegotiation.responder,
+  action: "offer",
+  amount: 10,
+});
+assert.equal(laterContinueOffer.foldNegotiation.status, "awaiting_accept", "later ready-to-fold should accept a continue offer");
+assert.equal(laterContinueOffer.foldNegotiation.phase, "betting_window", "later save offer should preserve betting-window phase");
+const laterContinueAccepted = respondPokerDoolReadyFold({
+  sessionId: laterBetSession.sessionId,
+  player: laterReadyFold.foldNegotiation.requester,
+  action: "accept",
+});
+assert.equal(laterContinueAccepted.foldNegotiation, null, "accepted later continue offer should clear negotiation");
 
 let goalSession = createPokerDoolSession({ variant: "24_36" });
 goalSession = startNextPokerDoolBettingRound({ sessionId: goalSession.sessionId });
@@ -375,6 +400,16 @@ function settlePokerRoundWithChecks(sessionSnapshot) {
   }
 
   return next;
+}
+
+function largestSuitCount(hand) {
+  const counts = new Map();
+
+  for (const card of hand) {
+    counts.set(card.suit, (counts.get(card.suit) ?? 0) + 1);
+  }
+
+  return Math.max(...counts.values());
 }
 
 function tacticalDool({ seat, hand, plays, trumpSuit = undefined, contract = undefined, otherHands = {} }) {

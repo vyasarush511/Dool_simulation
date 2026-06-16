@@ -396,7 +396,7 @@ h2 {
 
 .universe-dock-body {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(110px, 0.38fr);
   gap: 8px;
   min-height: 0;
   padding: 10px;
@@ -435,6 +435,91 @@ h2 {
   width: 31px;
   height: 44px;
   font-size: 0.76rem;
+}
+
+.trick-history-dock {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+}
+
+.dock-subhead {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trick-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.trick-history-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+  min-height: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+
+.trick-history-row:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.trick-history-row span {
+  color: var(--gold);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.trick-history-row strong {
+  font-size: 0.78rem;
+}
+
+.trick-history-row small,
+.trick-history-empty {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.25;
+}
+
+.trick-history-empty {
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.trick-detail-sheet {
+  width: min(520px, 100%);
+}
+
+.trick-detail-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 10px;
+}
+
+.trick-detail-card {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.trick-detail-card span {
+  color: var(--gold);
+  font-weight: 800;
 }
 
 .side-panel.is-poker {

@@ -9,7 +9,7 @@ import {
   rulesForVariant,
   startBettingHand,
 } from "./bettingRules.js";
-import { dealPartialDeck, gameVariant, POKER_DOOL_VARIANTS } from "./deck.js";
+import { DEAL_STYLES, dealPartialDeck, dealStyle, gameVariant, POKER_DOOL_VARIANTS } from "./deck.js";
 import { estimateSideEquities, evaluatePokerDoolSide, minimumContractForTricks } from "./handEvaluation.js";
 import { createReplayLog, muckCards, recordReplayEvent, summarizeReplay } from "./replayLog.js";
 
@@ -18,6 +18,8 @@ const SESSION_TTL_MS = 1000 * 60 * 60;
 const PLAYERS = ["Player 1", "Player 2"];
 const DEFAULT_TRUMP = "NT";
 const DEFAULT_CONTRACT_TRICKS = 5;
+const TRICK_HOLD_MS = 2200;
+const FINAL_TRICK_HOLD_MS = 5200;
 const RANK_VALUE = {
   "2": 2,
   "3": 3,
@@ -34,30 +36,32 @@ const RANK_VALUE = {
   A: 14,
 };
 
-export function createPokerDoolSession({ player = 0, variant = "36_52" } = {}) {
+export function createPokerDoolSession({ player = 0, variant = "36_52", dealStyle = "standard" } = {}) {
   cleanupSessions();
 
-  const session = buildPokerDoolSession({ variant });
+  const session = buildPokerDoolSession({ variant, dealStyle });
   sessions.set(session.id, session);
   return snapshotPokerDoolSession(session, normalizePlayer(player));
 }
 
-export function redealPokerDoolSession({ sessionId, player = 0, variant = undefined } = {}) {
+export function redealPokerDoolSession({ sessionId, player = 0, variant = undefined, dealStyle = undefined } = {}) {
   const existingSession = getSession(sessionId);
   const nextSession = buildPokerDoolSession({
     id: existingSession.id,
     createdAt: existingSession.createdAt,
     variant: variant ?? existingSession.variant.id,
+    dealStyle: dealStyle ?? existingSession.dealStyle.id,
   });
 
   sessions.set(existingSession.id, nextSession);
   return snapshotPokerDoolSession(nextSession, normalizePlayer(player));
 }
 
-function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), variant = "36_52" } = {}) {
+function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), variant = "36_52", dealStyle: styleId = "standard" } = {}) {
   const selectedVariant = gameVariant(variant);
+  const selectedDealStyle = dealStyle(styleId);
   const cardsPerSeat = selectedVariant.cardsPerSeat;
-  const deal = dealPartialDeck({ variant: selectedVariant.id });
+  const deal = dealPartialDeck({ variant: selectedVariant.id, dealStyle: selectedDealStyle.id });
   const trumpSuit = DEFAULT_TRUMP;
   const contractTricks = minimumContractForTricks(cardsPerSeat);
   const evaluations = [
@@ -73,6 +77,8 @@ function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), vari
     updatedAt: Date.now(),
     players: PLAYERS,
     variant: selectedVariant,
+    dealStyle: deal.dealStyle,
+    dealPattern: deal.dealPattern,
     rules,
     cardsPerSeat,
     totalTricks: cardsPerSeat,
@@ -95,6 +101,8 @@ function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), vari
     leaderSeat: 0,
     currentTrick: [],
     lastTrick: [],
+    lastTrickVisibleUntil: 0,
+    completedTricks: [],
     tricksPlayed: 0,
     tricksWon: [0, 0],
     hands: deal.hands,
@@ -113,6 +121,8 @@ function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), vari
   recordReplayEvent(session.replay, {
     type: "deal",
     variant: selectedVariant.id,
+    dealStyle: deal.dealStyle.id,
+    dealPattern: deal.dealPattern,
     cardsPerSeat,
     totalCards: cardsPerSeat * 4,
     deadCards: deal.deadCards.length,
@@ -223,6 +233,9 @@ export function playPokerDoolCard({ sessionId, player, seat, card }) {
   const hand = session.hands[cleanSeat];
   const cardIndex = hand.findIndex((candidate) => sameCard(candidate, cleanCard));
   const [playedCard] = hand.splice(cardIndex, 1);
+  if (session.currentTrick.length === 0) {
+    session.lastTrickVisibleUntil = 0;
+  }
   session.currentTrick.push({ seat: cleanSeat, card: playedCard });
   recordReplayEvent(session.replay, { type: "card", seat: cleanSeat, player: viewerPlayer, card: cardLabel(playedCard) });
 
@@ -244,8 +257,8 @@ export function requestPokerDoolReadyFold({ sessionId, player }) {
     throw new Error("There is already a ready-to-fold offer pending.");
   }
 
-  if (!session.activeRound || session.betting.trick !== 0 || session.pendingPlayer === null) {
-    throw new Error("Ready to Fold is only available during trump bidding.");
+  if (!session.activeRound || session.pendingPlayer === null) {
+    throw new Error("Ready to Fold is only available during a betting window.");
   }
 
   if (session.pendingPlayer !== requester) {
@@ -254,11 +267,11 @@ export function requestPokerDoolReadyFold({ sessionId, player }) {
 
   session.foldNegotiation = {
     status: "awaiting_offer",
-    phase: "trump_bidding",
+    phase: session.betting.trick === 0 ? "trump_bidding" : "betting_window",
     requester,
     responder: 1 - requester,
     requestedSeat: null,
-    requestedTrick: 0,
+    requestedTrick: session.betting.trick,
     originalContractTricks: session.contractTricks,
     originalTrumpSuit: session.trumpSuit,
     proposedContractTricks: session.contractTricks,
@@ -269,13 +282,16 @@ export function requestPokerDoolReadyFold({ sessionId, player }) {
     type: "ready_fold_bid",
     player: requester,
     round: session.betting.round,
-    trick: 0,
+    trick: session.betting.trick,
+    phase: session.betting.trick === 0 ? "trump_bidding" : "betting_window",
     contractTricks: session.contractTricks,
     trumpSuit: session.trumpSuit,
   });
   recordReplayEvent(session.replay, {
     type: "ready_fold_bid",
     player: requester,
+    phase: session.betting.trick === 0 ? "trump_bidding" : "betting_window",
+    trick: session.betting.trick,
     contractTricks: session.contractTricks,
     trumpSuit: session.trumpSuit,
   });
@@ -307,10 +323,16 @@ export function respondPokerDoolReadyFold({ sessionId, player, action, amount, c
     }
 
     const offerAmount = sanitizeOfferAmount(amount, session, actor, { allowZero: true });
-    const contractChoice = validateContractChoice(session, {
-      contractTricks: contractTricks ?? session.contractTricks,
-      trumpSuit: trumpSuit ?? session.trumpSuit,
-    });
+    const contractChoice =
+      negotiation.phase === "trump_bidding"
+        ? validateContractChoice(session, {
+            contractTricks: contractTricks ?? session.contractTricks,
+            trumpSuit: trumpSuit ?? session.trumpSuit,
+          })
+        : {
+            contractTricks: session.contractTricks,
+            trumpSuit: session.trumpSuit,
+          };
     negotiation.status = "awaiting_accept";
     negotiation.offerAmount = offerAmount;
     negotiation.proposedContractTricks = contractChoice.contractTricks;
@@ -319,15 +341,18 @@ export function respondPokerDoolReadyFold({ sessionId, player, action, amount, c
       type: "bid_save_offer",
       player: actor,
       amount: offerAmount,
+      phase: negotiation.phase,
       contractTricks: contractChoice.contractTricks,
       trumpSuit: contractChoice.trumpSuit,
       round: session.betting.round,
-      trick: 0,
+      trick: session.betting.trick,
     });
     recordReplayEvent(session.replay, {
       type: "bid_save_offer",
       player: actor,
       amount: offerAmount,
+      phase: negotiation.phase,
+      trick: session.betting.trick,
       contractTricks: contractChoice.contractTricks,
       trumpSuit: contractChoice.trumpSuit,
     });
@@ -341,12 +366,14 @@ export function respondPokerDoolReadyFold({ sessionId, player, action, amount, c
     }
 
     if (action === "accept") {
-      updatePokerDoolContract(session, {
-        contractTricks: negotiation.proposedContractTricks,
-        trumpSuit: negotiation.proposedTrumpSuit,
-        player: actor,
-        allowActivePreflop: true,
-      });
+      if (negotiation.phase === "trump_bidding") {
+        updatePokerDoolContract(session, {
+          contractTricks: negotiation.proposedContractTricks,
+          trumpSuit: negotiation.proposedTrumpSuit,
+          player: actor,
+          allowActivePreflop: true,
+        });
+      }
       if (negotiation.offerAmount > 0) {
         applySaveOfferPayment(session, negotiation.responder, negotiation.offerAmount);
       }
@@ -355,6 +382,8 @@ export function respondPokerDoolReadyFold({ sessionId, player, action, amount, c
         player: actor,
         offeredBy: negotiation.responder,
         amount: negotiation.offerAmount,
+        phase: negotiation.phase,
+        trick: session.betting.trick,
         contractTricks: negotiation.proposedContractTricks,
         trumpSuit: negotiation.proposedTrumpSuit,
       });
@@ -489,9 +518,16 @@ function completeCurrentTrick(session) {
   session.tricksPlayed += 1;
   session.tricksWon[winningSide] += 1;
   session.lastTrick = completedTrick;
+  session.lastTrickVisibleUntil = Date.now() + TRICK_HOLD_MS;
   session.currentTrick = [];
   session.leaderSeat = winningPlay.seat;
   session.currentSeat = winningPlay.seat;
+  session.completedTricks.push({
+    trick: session.tricksPlayed,
+    winnerSeat: winningPlay.seat,
+    winnerPlayer: winningSide,
+    cards: completedTrick.map((play) => ({ seat: play.seat, player: sideForSeat(play.seat), card: cardLabel(play.card) })),
+  });
   recordReplayEvent(session.replay, { type: "take", seat: winningPlay.seat, trick: session.tricksPlayed });
 
   if (session.tricksWon[winningSide] >= session.contractTricks) {
@@ -503,6 +539,7 @@ function completeCurrentTrick(session) {
     session.showdown = true;
     session.winningPlayer = session.tricksWon[0] === session.tricksWon[1] ? null : Number(session.tricksWon[1] > session.tricksWon[0]);
     session.currentSeat = null;
+    session.lastTrickVisibleUntil = Date.now() + FINAL_TRICK_HOLD_MS;
     recordReplayEvent(session.replay, { type: "showdown" });
     return;
   }
@@ -521,6 +558,7 @@ function finalizeGoalReached(session, winningPlayer) {
   session.activeRound = false;
   session.pendingPlayer = null;
   session.currentSeat = null;
+  session.lastTrickVisibleUntil = Date.now() + FINAL_TRICK_HOLD_MS;
   recordReplayEvent(session.replay, {
     type: "goal_reached",
     player: winningPlayer,
@@ -575,6 +613,9 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
     viewerName: session.players[cleanViewer],
     players: session.players,
     variant: session.variant,
+    dealStyle: session.dealStyle,
+    dealStyles: Object.values(DEAL_STYLES),
+    dealPattern: session.dealPattern,
     variants: Object.values(POKER_DOOL_VARIANTS).map(({ id, label, name, deckSummary, dealtCards, totalDeckCards, cardsPerSeat }) => ({
       id,
       label,
@@ -611,7 +652,10 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
     playStarted: session.playStarted,
     currentSeat: session.currentSeat,
     currentTrick: session.currentTrick.map((play) => ({ seat: play.seat, player: sideForSeat(play.seat), card: cardLabel(play.card) })),
+    tableTrick: tableTrickForSnapshot(session),
+    tableTrickComplete: session.currentTrick.length === 0 && Date.now() < session.lastTrickVisibleUntil,
     lastTrick: session.lastTrick.map((play) => ({ seat: play.seat, player: sideForSeat(play.seat), card: cardLabel(play.card) })),
+    completedTricks: session.completedTricks,
     tricksPlayed: session.tricksPlayed,
     tricksWon: session.tricksWon,
     currentTurn,
@@ -694,6 +738,7 @@ function describeFoldNegotiation(session, viewerPlayer) {
     responderName: session.players[negotiation.responder],
     requestedSeat: negotiation.requestedSeat,
     requestedTrick: negotiation.requestedTrick,
+    phase: negotiation.phase,
     offerAmount: negotiation.offerAmount,
     proposedContractTricks: negotiation.proposedContractTricks,
     proposedTrumpSuit: negotiation.proposedTrumpSuit,
@@ -732,10 +777,18 @@ function makeMessage(session) {
   if (session.foldNegotiation) {
     const negotiation = session.foldNegotiation;
     if (negotiation.status === "awaiting_offer") {
-      return `${session.players[negotiation.requester]} is ready to fold the trump bid. ${session.players[negotiation.responder]} can offer a new target/trump.`;
+      if (negotiation.phase === "trump_bidding") {
+        return `${session.players[negotiation.requester]} is ready to fold the trump bid. ${session.players[negotiation.responder]} can offer a new target/trump.`;
+      }
+
+      return `${session.players[negotiation.requester]} is ready to fold this betting window. ${session.players[negotiation.responder]} can make a continue offer.`;
     }
 
-    return `${session.players[negotiation.requester]} can accept ${negotiation.proposedContractTricks} with ${negotiation.proposedTrumpSuit} or fold.`;
+    if (negotiation.phase === "trump_bidding") {
+      return `${session.players[negotiation.requester]} can accept ${negotiation.proposedContractTricks} with ${negotiation.proposedTrumpSuit} or fold.`;
+    }
+
+    return `${session.players[negotiation.requester]} can accept the continue offer or fold.`;
   }
 
   if (session.activeRound) {
@@ -804,6 +857,11 @@ function remainingCardsFromUniverse(session) {
 
 function playedCardLabels(session) {
   return session.replay.events.filter((event) => event.type === "card").map((event) => event.card);
+}
+
+function tableTrickForSnapshot(session) {
+  const visibleTrick = session.currentTrick.length > 0 || Date.now() >= session.lastTrickVisibleUntil ? session.currentTrick : session.lastTrick;
+  return visibleTrick.map((play) => ({ seat: play.seat, player: sideForSeat(play.seat), card: cardLabel(play.card) }));
 }
 
 function legalCardsForSeat(session, seat) {
