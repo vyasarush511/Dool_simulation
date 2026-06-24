@@ -8,6 +8,8 @@ const suitSymbols = {
 };
 const suitSortOrder = { S: 0, H: 1, D: 2, C: 3 };
 const rankSortOrder = { A: 0, K: 1, Q: 2, J: 3, "10": 4, "9": 5, "8": 6, "7": 7, "6": 8, "5": 9, "4": 10, "3": 11, "2": 12 };
+const renderApiBase = "https://dool-simulation.onrender.com";
+const apiBase = window.location.hostname.endsWith("github.io") ? renderApiBase : "";
 
 const state = {
   game: null,
@@ -422,7 +424,7 @@ async function runRequest(action) {
 }
 
 async function postJson(url, payload) {
-  const response = await fetch(url, {
+  const response = await fetch(`${apiBase}${url}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),

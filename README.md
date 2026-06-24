@@ -99,6 +99,15 @@ Then open:
 http://localhost:3000
 ```
 
+## Public Deployment
+
+The project uses two deployment pieces:
+
+- GitHub Pages hosts the static frontend at `https://vyasarush511.github.io/Dool_simulation/`.
+- Render hosts the Node backend API at `https://dool-simulation.onrender.com`.
+
+This split is needed because GitHub Pages can serve HTML/CSS/JS, but it cannot run the Node server that stores shared rooms, hidden cards, betting state, and API routes. The GitHub Pages workflow in `.github/workflows/pages.yml` publishes the `public/` folder, and the frontend calls the Render backend when opened from `github.io`.
+
 The browser opens on the Poker-Dool launch prototype. It is a two-player betting table with two variants:
 
 - `32 / 42`: randomly sample a 42-card universe from the full 52-card deck, deal 32 cards, 8 cards per hand, 10 universe cards hidden.

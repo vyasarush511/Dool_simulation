@@ -21,6 +21,11 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
 const port = Number(process.env.PORT ?? 3000);
+const corsHeaders = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -32,6 +37,12 @@ const mimeTypes = {
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, corsHeaders);
+    response.end();
+    return;
+  }
 
   if (url.pathname === "/api/game") {
     try {
@@ -238,6 +249,7 @@ function resolvePublicPath(pathname) {
 
 function sendJson(response, payload) {
   response.writeHead(200, {
+    ...corsHeaders,
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
   });
@@ -245,7 +257,7 @@ function sendJson(response, payload) {
 }
 
 function sendError(response, error) {
-  response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+  response.writeHead(400, { ...corsHeaders, "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify({ error: error.message ?? String(error) }));
 }
 
