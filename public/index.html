@@ -35,6 +35,10 @@
               <span>Score</span>
               <strong id="scoreText">0 - 0</strong>
             </div>
+            <div>
+              <span>Winner</span>
+              <strong id="winnerText">-</strong>
+            </div>
           </div>
         </div>
 
@@ -119,7 +123,6 @@
                 <option value="D">Diamonds</option>
                 <option value="H">Hearts</option>
                 <option value="S">Spades</option>
-                <option value="NT">No Trump</option>
               </select>
             </label>
             <button id="startContractButton" type="button">Start</button>
@@ -137,7 +140,7 @@
               <label class="poker-field">
                 <span>Game</span>
                 <select id="gameVariantSelect">
-                  <option value="36_52">36 / 52</option>
+                  <option value="32_42">32 / 42</option>
                   <option value="24_36">24 / 36</option>
                 </select>
               </label>
@@ -151,18 +154,16 @@
               <label class="poker-field">
                 <span>Target Tricks</span>
                 <select id="pokerContractSelect">
+                  <option value="4">4 tricks</option>
                   <option value="5">5 tricks</option>
                   <option value="6">6 tricks</option>
                   <option value="7">7 tricks</option>
                   <option value="8">8 tricks</option>
-                  <option value="9">9 tricks</option>
-                  <option value="10">10 tricks</option>
                 </select>
               </label>
               <label class="poker-field">
                 <span>Trump</span>
                 <select id="pokerTrumpSelect">
-                  <option value="NT">No Trump</option>
                   <option value="S">Spades</option>
                   <option value="H">Hearts</option>
                   <option value="D">Diamonds</option>
@@ -230,18 +231,16 @@
           <label>
             <span>Target Tricks</span>
             <select id="modalContractSelect">
+              <option value="4">4 tricks</option>
               <option value="5">5 tricks</option>
               <option value="6">6 tricks</option>
               <option value="7">7 tricks</option>
               <option value="8">8 tricks</option>
-              <option value="9">9 tricks</option>
-              <option value="10">10 tricks</option>
             </select>
           </label>
           <label>
             <span>Trump</span>
             <select id="modalTrumpSelect">
-              <option value="NT">No Trump</option>
               <option value="S">Spades</option>
               <option value="H">Hearts</option>
               <option value="D">Diamonds</option>
@@ -278,7 +277,6 @@
           <label id="saveOfferTrumpField">
             <span>New Trump</span>
             <select id="saveOfferTrumpSelect">
-              <option value="NT">No Trump</option>
               <option value="S">Spades</option>
               <option value="H">Hearts</option>
               <option value="D">Diamonds</option>

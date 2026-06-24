@@ -7,24 +7,24 @@ export const DEFAULT_BETTING_RULES = {
   maxPot: 600,
   commitmentCaps: [
     { trick: 0, cap: 40 },
-    { trick: 3, cap: 80 },
-    { trick: 5, cap: 140 },
-    { trick: 7, cap: 220 },
-    { trick: 9, cap: 300 },
+    { trick: 2, cap: 80 },
+    { trick: 4, cap: 140 },
+    { trick: 6, cap: 220 },
+    { trick: 7, cap: 300 },
   ],
 };
 
 export const BETTING_RULES_BY_VARIANT = {
-  "36_52": {
+  "32_42": {
     ...DEFAULT_BETTING_RULES,
-    maxCommitmentPerPlayer: 320,
-    maxPot: 640,
+    maxCommitmentPerPlayer: 300,
+    maxPot: 600,
     commitmentCaps: [
       { trick: 0, cap: 50 },
-      { trick: 3, cap: 90 },
-      { trick: 5, cap: 160 },
-      { trick: 7, cap: 250 },
-      { trick: 8, cap: 320 },
+      { trick: 2, cap: 100 },
+      { trick: 4, cap: 170 },
+      { trick: 6, cap: 240 },
+      { trick: 7, cap: 300 },
     ],
   },
   "24_36": {
@@ -40,8 +40,8 @@ export const BETTING_RULES_BY_VARIANT = {
   },
 };
 
-export function rulesForVariant(variantId = "36_52") {
-  const rules = BETTING_RULES_BY_VARIANT[variantId] ?? BETTING_RULES_BY_VARIANT["36_52"];
+export function rulesForVariant(variantId = "32_42") {
+  const rules = BETTING_RULES_BY_VARIANT[variantId] ?? BETTING_RULES_BY_VARIANT["32_42"];
   return {
     ...rules,
     commitmentCaps: rules.commitmentCaps.map((entry) => ({ ...entry })),
@@ -72,7 +72,7 @@ export function startBettingHand({ players = ["Player 1", "Player 2"], stacks = 
   return snapshotBettingState(state);
 }
 
-export function beginBettingRound(state, { trick }) {
+export function beginBettingRound(state, { trick }, rules = DEFAULT_BETTING_RULES) {
   const next = cloneState(state);
   next.round += 1;
   next.trick = trick;
@@ -83,7 +83,7 @@ export function beginBettingRound(state, { trick }) {
     type: "round_start",
     round: next.round,
     trick,
-    cap: commitmentCapForTrick(trick),
+    cap: commitmentCapForTrick(trick, rules),
   });
   return snapshotBettingState(next);
 }

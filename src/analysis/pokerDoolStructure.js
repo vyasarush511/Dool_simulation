@@ -179,7 +179,7 @@ function makeRecommendation(rows, { cardsPerSeat }) {
     maxPot: DEFAULT_BETTING_RULES.maxPot,
     rationale:
       `${best.structure} gave the strongest balance of pot growth, late folds, action density, and cap safety. ` +
-      `The default 40-card format creates ${cardsPerSeat} tricks, so the opening contract floor should be ${minimumContractForTricks(cardsPerSeat)} tricks.`,
+      `The default 32-card format creates ${cardsPerSeat} tricks, so the opening contract floor should be ${minimumContractForTricks(cardsPerSeat)} tricks.`,
   };
 }
 
@@ -211,7 +211,7 @@ Seed: ${seed}
 
 ## Recommended Draft
 
-- Format: **${recommendation.totalCards} cards dealt from 52**.
+- Format: **${recommendation.totalCards} cards dealt from the selected universe**.
 - Cards per player/seat: **${recommendation.cardsPerSeat}**.
 - Total tricks: **${recommendation.totalTricks}**.
 - Minimum contract/trump bid: **${recommendation.minimumContract} tricks**.
@@ -232,7 +232,7 @@ ${recommendation.rationale}
 4. A player facing a bet may **call**, **raise**, or **fold**.
 5. Raising is capped by min bet, max raises per round, the progressive commitment cap, and max pot.
 6. Early rounds have smaller caps; later rounds unlock larger caps. This keeps users in the hand longer while still allowing larger pots when the story of the hand is clearer.
-7. Folded hands may be **mucked** by default. Cards are exposed only for replay, dispute review, cash-out audit, or explicit reveal mode.
+7. Folded or target-reached hands keep unplayed opponent cards hidden by default. Cards are exposed only for replay, dispute review, cash-out audit, or explicit reveal mode.
 
 ## Structure Comparison
 
@@ -240,8 +240,8 @@ ${table}
 
 ## Hand Evaluation Notes
 
-- **No Trump**: count sure winners by top sequences in each suit. A is one winner; AK is two; AKQ is three; and so on.
-- **Trump**: count losers using bridge-style losing trick count. In each suit, missing A/K/Q among the first three cards creates likely losers. Long trump holdings reduce loser count.
+- **Top-sequence winners**: count sure winners by top sequences in each suit. A is one winner; AK is two; AKQ is three; and so on.
+- **Trump losers**: count losers using bridge-style losing trick count. In each suit, missing A/K/Q among the first three cards creates likely losers. Long trump holdings reduce loser count.
 - These are not final EV models. They are explainable first-pass inputs for bidding, betting, folding, and cash-out pricing.
 `;
 }

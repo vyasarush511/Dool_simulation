@@ -233,32 +233,36 @@ assert.deepEqual(
   "replay log should track expose and muck events",
 );
 
-let pokerSession = createPokerDoolSession({ variant: "36_52" });
-assert.equal(pokerSession.variant.id, "36_52", "Poker-Dool UI session should default to the 36/52 game");
-assert.equal(pokerSession.totalCards, 36, "36/52 Poker-Dool should deal 36 cards");
-assert.equal(pokerSession.totalDeckCards, 52, "36/52 Poker-Dool should use the full 52-card deck");
-assert.equal(pokerSession.cardsPerSeat, 9, "36/52 Poker-Dool should deal 9 cards to each hand");
-assert.equal(pokerSession.deadCards, 16, "36/52 Poker-Dool should leave 16 cards hidden");
-assert.equal(pokerSession.deckUniverseCards.length, 52, "36/52 Poker-Dool should expose the full 52-card universe");
-assert.equal(pokerSession.minimumContract, 5, "36/52 Poker-Dool should show a 5-trick contract floor");
+let pokerSession = createPokerDoolSession({ variant: "32_42" });
+assert.equal(pokerSession.variant.id, "32_42", "Poker-Dool UI session should default to the 32/42 game");
+assert.equal(pokerSession.totalCards, 32, "32/42 Poker-Dool should deal 32 cards");
+assert.equal(pokerSession.totalDeckCards, 42, "32/42 Poker-Dool should use a 42-card sampled universe");
+assert.equal(pokerSession.cardsPerSeat, 8, "32/42 Poker-Dool should deal 8 cards to each hand");
+assert.equal(pokerSession.deadCards, 10, "32/42 Poker-Dool should leave 10 cards hidden");
+assert.equal(pokerSession.deckUniverseCards.length, 26, "32/42 universe view should exclude the viewer's own 16 cards");
+assert.equal(pokerSession.minimumContract, 4, "32/42 Poker-Dool should show a 4-trick contract floor");
+assert.ok(
+  [...pokerSession.hands[0], ...pokerSession.hands[2]].every((label) => !pokerSession.remainingUniverseCards.includes(label)),
+  "viewer-owned cards should not appear in the live universe",
+);
 const shortDeckSession = createPokerDoolSession({ variant: "24_36" });
 assert.equal(shortDeckSession.totalCards, 24, "24/36 Poker-Dool should deal 24 cards");
 assert.equal(shortDeckSession.totalDeckCards, 36, "24/36 Poker-Dool should use a 36-card sampled universe");
 assert.equal(shortDeckSession.cardsPerSeat, 6, "24/36 Poker-Dool should deal 6 cards to each hand");
 assert.equal(shortDeckSession.deadCards, 12, "24/36 Poker-Dool should leave 12 cards hidden");
 assert.equal(shortDeckSession.minimumContract, 3, "24/36 Poker-Dool should show a 3-trick contract floor");
-assert.equal(shortDeckSession.deckUniverseCards.length, 36, "24/36 Poker-Dool should expose its 36-card universe");
-assert.equal(new Set(shortDeckSession.deckUniverseCards).size, 36, "24/36 universe should not contain duplicate cards");
+assert.equal(shortDeckSession.deckUniverseCards.length, 24, "24/36 universe view should exclude the viewer's own 12 cards");
+assert.equal(new Set(shortDeckSession.deckUniverseCards).size, 24, "24/36 universe should not contain duplicate cards");
 assert.ok(
-  [...shortDeckSession.hands[0], ...shortDeckSession.hands[2]].every((label) => shortDeckSession.deckUniverseCards.includes(label)),
-  "visible 24/36 cards should come from the sampled universe",
+  [...shortDeckSession.hands[0], ...shortDeckSession.hands[2]].every((label) => !shortDeckSession.deckUniverseCards.includes(label)),
+  "visible 24/36 cards should be removed from the viewer's universe",
 );
-const goulashDeal = dealPartialDeck({ variant: "36_52", dealStyle: "goulash", rng: seededRandom(7) });
+const goulashDeal = dealPartialDeck({ variant: "32_42", dealStyle: "goulash", rng: seededRandom(7) });
 assert.equal(goulashDeal.dealStyle.id, "goulash", "goulash deal should record its deal style");
-assert.equal(goulashDeal.dealPattern.reduce((sum, value) => sum + value, 0), 9, "36/52 goulash packets should sum to hand length");
-assert.equal(goulashDeal.hands.every((hand) => hand.length === 9), true, "goulash should deal equal hand sizes");
+assert.equal(goulashDeal.dealPattern.reduce((sum, value) => sum + value, 0), 8, "32/42 goulash packets should sum to hand length");
+assert.equal(goulashDeal.hands.every((hand) => hand.length === 8), true, "goulash should deal equal hand sizes");
 assert.ok(goulashDeal.hands.some((hand) => largestSuitCount(hand) >= 5), "goulash should produce at least one skewed suit shape");
-const redealProbe = createPokerDoolSession({ variant: "36_52" });
+const redealProbe = createPokerDoolSession({ variant: "32_42" });
 const redealtShortDeck = redealPokerDoolSession({ sessionId: redealProbe.sessionId, player: 0, variant: "24_36", dealStyle: "goulash" });
 assert.equal(redealtShortDeck.sessionId, redealProbe.sessionId, "shared redeal should keep the same room id");
 assert.equal(redealtShortDeck.variant.id, "24_36", "shared redeal should update the room variant");
@@ -282,6 +286,7 @@ const afterPlayerOneRaise = applyPokerDoolHumanAction({
 });
 assert.equal(afterPlayerOneRaise.contractTricks, 8, "active preflop raiser should be able to choose target tricks");
 assert.equal(afterPlayerOneRaise.trumpSuit, "D", "active preflop raiser should be able to choose trump");
+assert.equal(afterPlayerOneRaise.contractOwner, 0, "the player who raises the trump bid should own the contract target");
 assert.equal(afterPlayerOneRaise.pendingPlayer, 1, "after Player 1 raises, Player 2 should act");
 const readyFoldBid = requestPokerDoolReadyFold({ sessionId: pokerRound.sessionId, player: 1 });
 assert.equal(readyFoldBid.foldNegotiation.status, "awaiting_offer", "ready-to-fold bid should ask the opponent for a new bid");
@@ -302,15 +307,32 @@ assert.equal(afterPlayerTwoCall.activeRound, false, "a matched preflop raise sho
 assert.equal(afterPlayerTwoCall.playStarted, true, "card play should start after preflop betting closes");
 assert.equal(afterPlayerTwoCall.contractTricks, 6, "accepted bid save offer should update the target");
 assert.equal(afterPlayerTwoCall.trumpSuit, "S", "accepted bid save offer should update trump");
+assert.equal(afterPlayerTwoCall.contractOwner, 0, "accepted bid save offer should assign contract ownership to the offering player");
+assert.deepEqual(afterPlayerTwoCall.sideTargets, [6, 7], "opponent target should be one trick higher than the bidder target");
 const firstLegalCard = pokerRound.hands[0][0];
 const afterFirstCard = playPokerDoolCard({ sessionId: pokerRound.sessionId, player: 0, seat: 0, card: firstLegalCard });
 assert.equal(afterFirstCard.currentTrick.length, 1, "playing a legal card should add it to the current trick");
 assert.equal(
   afterFirstCard.remainingUniverseCards.length,
-  afterPlayerTwoCall.remainingUniverseCards.length - 1,
-  "remaining universe should shrink by one after a played card",
+  afterPlayerTwoCall.remainingUniverseCards.length,
+  "playing a viewer-owned card should not change the unknown universe because it was already excluded",
 );
 assert.ok(!afterFirstCard.remainingUniverseCards.includes(firstLegalCard), "played cards should leave the live universe");
+const opponentCardView = getPokerDoolSession({ sessionId: pokerRound.sessionId, player: 1 });
+const opponentCard = opponentCardView.currentTurn.legalCards[0];
+playPokerDoolCard({
+  sessionId: opponentCardView.sessionId,
+  player: 1,
+  seat: opponentCardView.currentTurn.seat,
+  card: opponentCard,
+});
+const afterOpponentCardForPlayerOne = getPokerDoolSession({ sessionId: pokerRound.sessionId, player: 0 });
+assert.equal(
+  afterOpponentCardForPlayerOne.remainingUniverseCards.length,
+  afterFirstCard.remainingUniverseCards.length - 1,
+  "opponent-played cards should leave the viewer's live universe",
+);
+assert.ok(!afterOpponentCardForPlayerOne.remainingUniverseCards.includes(opponentCard), "opponent-played cards should be removed live");
 assert.throws(
   () => requestPokerDoolReadyFold({ sessionId: pokerRound.sessionId, player: 1 }),
   /betting window/,
@@ -378,8 +400,11 @@ while (!goalSession.showdown && goalGuard < 80) {
 
 assert.ok(goalSession.goalReached, "Poker-Dool should stop as soon as a player reaches the target");
 assert.ok(goalSession.mucked, "target-reached endings should muck remaining cards");
-assert.ok(goalSession.tricksWon[goalSession.winningPlayer] >= goalSession.contractTricks, "winner should have reached the target");
-assert.ok(goalSession.tricksPlayed < goalSession.totalTricks, "target-reached endings should stop before all cards are played");
+assert.ok(
+  goalSession.tricksWon[goalSession.winningPlayer] >= goalSession.sideTargets[goalSession.winningPlayer],
+  "winner should have reached their side-specific target",
+);
+assert.equal(goalSession.currentSeat, null, "target-reached endings should stop card play immediately");
 const goalWinnerView = getPokerDoolSession({ sessionId: goalSession.sessionId, player: goalSession.winningPlayer });
 const hiddenOpponentCards = goalWinnerView.hands
   .filter((_, seat) => seat % 2 !== goalSession.winningPlayer)

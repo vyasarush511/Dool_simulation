@@ -14,7 +14,7 @@ const state = {
   poker: null,
   mode: "poker",
   viewerPlayer: readViewerPlayer(),
-  selectedVariant: new URLSearchParams(window.location.search).get("variant") ?? "36_52",
+  selectedVariant: new URLSearchParams(window.location.search).get("variant") ?? "32_42",
   selectedDealStyle: new URLSearchParams(window.location.search).get("deal") ?? "standard",
   pokerSessionId: new URLSearchParams(window.location.search).get("room"),
   selectedTrickNumber: null,
@@ -30,6 +30,7 @@ const els = {
   trumpText: document.querySelector("#trumpText"),
   trickScoreText: document.querySelector("#trickScoreText"),
   scoreText: document.querySelector("#scoreText"),
+  winnerText: document.querySelector("#winnerText"),
   statusLine: document.querySelector("#statusLine"),
   currentTrick: document.querySelector("#currentTrick"),
   botAnalysis: document.querySelector("#botAnalysis"),
@@ -164,6 +165,9 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
+if (![...els.gameVariantSelect.options].some((option) => option.value === state.selectedVariant)) {
+  state.selectedVariant = "32_42";
+}
 els.gameVariantSelect.value = state.selectedVariant;
 els.dealStyleSelect.value = state.selectedDealStyle;
 
@@ -523,16 +527,23 @@ function renderPokerSeatRoles() {
   for (let visualSeat = 0; visualSeat < 4; visualSeat += 1) {
     const actualSeat = visualMap[visualSeat];
     const roleEl = document.querySelector(`#seat-role-${visualSeat}`);
+    const titleEl = roleEl.parentElement;
+    const side = sideForSeat(actualSeat);
     roleEl.textContent = labels[actualSeat];
+    titleEl.classList.toggle("is-hand-winner", state.poker.winningPlayer === side);
+    titleEl.classList.toggle("is-last-trick-winner", state.poker.winningPlayer === null && state.poker.lastTrickWinnerPlayer === side);
+    titleEl.classList.toggle("is-current-starter", state.poker.currentSeat !== null && actualSeat === state.poker.currentSeat);
   }
 }
 
 function renderPokerHeader() {
   const poker = state.poker;
-  els.contractText.textContent = `${poker.contractTricks} tricks`;
+  const targets = poker.sideTargets ?? [poker.contractTricks, Math.min(poker.totalTricks, poker.contractTricks + 1)];
+  els.contractText.textContent = `P1 ${targets[0]} / P2 ${targets[1]}`;
   els.trumpText.textContent = formatTrump(poker.trumpSuit);
   els.trickScoreText.textContent = `${poker.tricksWon[0]} - ${poker.tricksWon[1]}`;
   els.scoreText.textContent = `Pot ${poker.betting.pot}`;
+  els.winnerText.textContent = poker.winningPlayerName ?? (poker.lastTrickWinnerName ? `Last ${poker.lastTrickWinnerName}` : "-");
 }
 
 function renderPokerHands() {
@@ -584,8 +595,9 @@ function renderPokerPanel() {
   state.selectedDealStyle = poker.dealStyle?.id ?? state.selectedDealStyle;
   els.gameVariantSelect.value = poker.variant.id;
   els.dealStyleSelect.value = state.selectedDealStyle;
-  els.variantInfoText.textContent = `${poker.deckSummary} Deal: ${poker.dealStyle?.label ?? "Standard"}${poker.dealPattern?.length ? ` (${poker.dealPattern.join("-")})` : ""}. Betting rounds: ${poker.bettingRounds.map(formatRoundLabel).join(", ")}.`;
-  els.deckUniverseButton.textContent = `Expand Universe (${remainingUniverseCount(poker)}/${poker.totalDeckCards})`;
+  const targets = poker.sideTargets ?? [poker.contractTricks, Math.min(poker.totalTricks, poker.contractTricks + 1)];
+  els.variantInfoText.textContent = `${poker.deckSummary} Deal: ${poker.dealStyle?.label ?? "Standard"}${poker.dealPattern?.length ? ` (${poker.dealPattern.join("-")})` : ""}. Betting rounds: ${poker.bettingRounds.map(formatRoundLabel).join(", ")}. Targets: Player 1 needs ${targets[0]}, Player 2 needs ${targets[1]}.`;
+  els.deckUniverseButton.textContent = `Unknown Universe (${remainingUniverseCount(poker)})`;
   els.pokerPotText.textContent = poker.betting.pot;
   els.pokerGrossText.textContent = poker.betting.grossCollected;
   els.pokerTrickText.textContent = poker.activeRound ? "Betting now" : nextStepLabel(poker);
@@ -799,11 +811,8 @@ function renderTrickDetailModal() {
 
 function universeBodyText(poker) {
   const played = poker.playedUniverseCards?.length ?? 0;
-  const source =
-    poker.variant.id === "24_36"
-      ? "Random 36-card universe from the full deck."
-      : "Full 52-card universe.";
-  return `${source} ${played} played card${played === 1 ? "" : "s"} removed live.`;
+  const source = `Random ${poker.totalDeckCards}-card universe from the full deck.`;
+  return `${source} Your own cards and ${played} played card${played === 1 ? "" : "s"} are removed from this live view.`;
 }
 
 function remainingUniverseCards(poker) {
@@ -824,7 +833,7 @@ function renderPokerAnalysis() {
     row.className = "analysis-row";
     row.innerHTML = `
       <strong>${state.poker.players[evaluation.side]}</strong>
-      <span>${Math.round(evaluation.equity * 100)}% win estimate | ${evaluation.hcp} HCP | ${evaluation.bestTrumpFit} ${evaluation.bestTrumpSuit} fit | ${evaluation.noTrumpWinners} NT winners | ${evaluation.trumpLosers} trump losers</span>
+      <span>${Math.round(evaluation.equity * 100)}% win estimate | ${evaluation.hcp} HCP | ${evaluation.bestTrumpFit} ${evaluation.bestTrumpSuit} fit | ${evaluation.noTrumpWinners} top-sequence winners | ${evaluation.trumpLosers} trump losers</span>
     `;
     els.pokerAnalysis.append(row);
   }
@@ -838,12 +847,13 @@ function renderPokerHistory() {
     els.bidHistory.append(historyRow(formatPokerEvent(event)));
   }
 
-  els.playHistory.append(historyRow(`Contract: ${state.poker.contractTricks} tricks with ${formatTrump(state.poker.trumpSuit)}`));
+  const targets = state.poker.sideTargets ?? [state.poker.contractTricks, Math.min(state.poker.totalTricks, state.poker.contractTricks + 1)];
+  els.playHistory.append(historyRow(`Contract: ${state.poker.contractOwnerName} bid ${state.poker.contractTricks} with ${formatTrump(state.poker.trumpSuit)}; targets P1 ${targets[0]}, P2 ${targets[1]}`));
   els.playHistory.append(historyRow(`${state.poker.totalCards}/${state.poker.totalDeckCards}: ${state.poker.cardsPerSeat} cards per hand, ${state.poker.deadCards} hidden`));
   els.playHistory.append(historyRow(state.poker.deckSummary));
   els.playHistory.append(historyRow(`You can only see ${state.poker.viewerName}'s cards`));
   if (state.poker.goalReached) {
-    els.playHistory.append(historyRow(`Goal reached; remaining cards mucked`));
+    els.playHistory.append(historyRow(`Goal reached; remaining cards stay hidden`));
   } else {
     els.playHistory.append(historyRow(state.poker.folded ? "Hand ended by fold" : "System opens betting windows when needed"));
   }
@@ -858,6 +868,7 @@ function renderSeatRoles() {
 
   for (let seat = 0; seat < 4; seat += 1) {
     const roleEl = document.querySelector(`#seat-role-${seat}`);
+    roleEl.parentElement.classList.remove("is-hand-winner", "is-last-trick-winner", "is-current-starter");
     const side = sideForSeat(seat);
     roleEl.textContent = side === state.game.humanSide ? `${sideNames[side]} Human` : `${sideNames[side]} Bot`;
   }
@@ -987,7 +998,10 @@ function historyRow(text) {
 function currentBetRaiseAction() {
   const actions = state.poker?.activeActions ?? state.poker?.humanActions;
   if (!actions) return null;
-  return actions.find((action) => action.type === "raise") ?? actions.find((action) => action.type === "bet") ?? null;
+  const candidate = actions.find((action) => action.type === "raise") ?? actions.find((action) => action.type === "bet") ?? null;
+  if (!candidate) return null;
+  if (Number(candidate.max) < Number(candidate.min)) return null;
+  return candidate;
 }
 
 function formatPokerEvent(event) {
@@ -1009,6 +1023,7 @@ function formatPokerEvent(event) {
     return `${player}offers continue${chipText}`;
   }
   if (event.type === "bid_save_offer_paid") return `${player}adds save offer ${event.amount}`;
+  if (event.type === "set_contract") return `${player || state.poker.contractOwnerName + " "}sets ${event.contractTricks} with ${formatTrump(event.trumpSuit)}`;
   if (event.type === "save_offer") return `${player}offers ${event.amount} to continue`;
   if (event.type === "save_offer_paid") return `${player}pays save offer ${event.amount}`;
   if (event.type === "fold") return `${player}folds`;
@@ -1130,7 +1145,7 @@ function readViewerPlayer() {
 }
 
 function formatTrump(suit) {
-  if (!suit || suit === "NT") return "No Trump";
+  if (!suit) return "-";
   return `${suitSymbols[suit]} ${suit}`;
 }
 

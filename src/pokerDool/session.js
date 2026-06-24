@@ -16,7 +16,7 @@ import { createReplayLog, muckCards, recordReplayEvent, summarizeReplay } from "
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60;
 const PLAYERS = ["Player 1", "Player 2"];
-const DEFAULT_TRUMP = "NT";
+const DEFAULT_TRUMP = "S";
 const DEFAULT_CONTRACT_TRICKS = 5;
 const TRICK_HOLD_MS = 2200;
 const FINAL_TRICK_HOLD_MS = 5200;
@@ -36,7 +36,7 @@ const RANK_VALUE = {
   A: 14,
 };
 
-export function createPokerDoolSession({ player = 0, variant = "36_52", dealStyle = "standard" } = {}) {
+export function createPokerDoolSession({ player = 0, variant = "32_42", dealStyle = "standard" } = {}) {
   cleanupSessions();
 
   const session = buildPokerDoolSession({ variant, dealStyle });
@@ -57,7 +57,7 @@ export function redealPokerDoolSession({ sessionId, player = 0, variant = undefi
   return snapshotPokerDoolSession(nextSession, normalizePlayer(player));
 }
 
-function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), variant = "36_52", dealStyle: styleId = "standard" } = {}) {
+function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), variant = "32_42", dealStyle: styleId = "standard" } = {}) {
   const selectedVariant = gameVariant(variant);
   const selectedDealStyle = dealStyle(styleId);
   const cardsPerSeat = selectedVariant.cardsPerSeat;
@@ -86,6 +86,7 @@ function buildPokerDoolSession({ id = randomUUID(), createdAt = Date.now(), vari
     nextRoundIndex: 0,
     trumpSuit,
     contractTricks,
+    contractOwner: 0,
     betting,
     activeRound: false,
     pendingPlayer: null,
@@ -370,7 +371,7 @@ export function respondPokerDoolReadyFold({ sessionId, player, action, amount, c
         updatePokerDoolContract(session, {
           contractTricks: negotiation.proposedContractTricks,
           trumpSuit: negotiation.proposedTrumpSuit,
-          player: actor,
+          player: negotiation.responder,
           allowActivePreflop: true,
         });
       }
@@ -428,25 +429,33 @@ function updatePokerDoolContract(
     session.activeRound &&
     session.betting.trick === 0 &&
     session.pendingPlayer === normalizePlayer(player);
+  const isNegotiatedPreflopChoice =
+    allowActivePreflop && session.activeRound && session.betting.trick === 0 && Boolean(session.foldNegotiation);
 
-  if (!isActivePreflopChoice && (session.activeRound || session.folded || session.showdown || session.nextRoundIndex > 0)) {
+  if (!isActivePreflopChoice && !isNegotiatedPreflopChoice && (session.activeRound || session.folded || session.showdown || session.nextRoundIndex > 0)) {
     throw new Error("Contract and trump can only be changed before preflop betting starts.");
   }
 
   session.trumpSuit = contractChoice.trumpSuit;
   session.contractTricks = contractChoice.contractTricks;
+  session.contractOwner = normalizePlayer(player);
   session.evaluations = [
     evaluatePokerDoolSide({ hands: session.hands, side: 0, trumpSuit: contractChoice.trumpSuit }),
     evaluatePokerDoolSide({ hands: session.hands, side: 1, trumpSuit: contractChoice.trumpSuit }),
   ];
   session.equities = estimateSideEquities(session.evaluations[0], session.evaluations[1]);
-  recordReplayEvent(session.replay, { type: "set_contract", contractTricks: session.contractTricks, trumpSuit: contractChoice.trumpSuit });
+  recordReplayEvent(session.replay, {
+    type: "set_contract",
+    player: session.contractOwner,
+    contractTricks: session.contractTricks,
+    trumpSuit: contractChoice.trumpSuit,
+  });
   session.updatedAt = Date.now();
 }
 
 function validateContractChoice(session, { contractTricks = session.contractTricks, trumpSuit = session.trumpSuit }) {
-  if (!["C", "D", "H", "S", "NT"].includes(trumpSuit)) {
-    throw new Error(`Invalid trump: ${trumpSuit}`);
+  if (!["C", "D", "H", "S"].includes(trumpSuit)) {
+    throw new Error(`Invalid trump: ${trumpSuit}. Choose C, D, H, or S.`);
   }
 
   const cleanContractTricks = Number(contractTricks);
@@ -495,7 +504,7 @@ function applyActionToSession(session, action) {
 }
 
 function openBettingRound(session, trick, firstPlayer) {
-  session.betting = beginBettingRound(session.betting, { trick });
+  session.betting = beginBettingRound(session.betting, { trick }, session.rules);
   session.activeRound = true;
   session.pendingPlayer = normalizePlayer(firstPlayer);
   session.actedSinceAggression = [false, false];
@@ -530,7 +539,7 @@ function completeCurrentTrick(session) {
   });
   recordReplayEvent(session.replay, { type: "take", seat: winningPlay.seat, trick: session.tricksPlayed });
 
-  if (session.tricksWon[winningSide] >= session.contractTricks) {
+  if (session.tricksWon[winningSide] >= contractTargetForPlayer(session, winningSide)) {
     finalizeGoalReached(session, winningSide);
     return;
   }
@@ -562,7 +571,7 @@ function finalizeGoalReached(session, winningPlayer) {
   recordReplayEvent(session.replay, {
     type: "goal_reached",
     player: winningPlayer,
-    target: session.contractTricks,
+    target: contractTargetForPlayer(session, winningPlayer),
     trick: session.tricksPlayed,
   });
   muckCards(session.replay, { player: 0, reason: "target-reached" });
@@ -576,6 +585,7 @@ function finalizeFold(session, foldedPlayer, { reason }) {
   session.currentSeat = null;
   session.foldNegotiation = null;
   session.betting.folded[foldedPlayer] = true;
+  session.winningPlayer = 1 - foldedPlayer;
   if (reason !== "betting-fold") {
     session.betting.actionLog.push({
       type: "fold",
@@ -604,7 +614,9 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
   const nextTrick = session.bettingRounds[session.nextRoundIndex] ?? null;
   const activePlayer = session.pendingPlayer;
   const currentTurn = currentTurnForViewer(session, cleanViewer);
-  const remainingUniverseCards = remainingCardsFromUniverse(session);
+  const remainingUniverseCards = remainingCardsFromUniverse(session, cleanViewer);
+  const sideTargets = [contractTargetForPlayer(session, 0), contractTargetForPlayer(session, 1)];
+  const lastCompletedTrick = session.completedTricks.at(-1) ?? null;
 
   return {
     sessionId: session.id,
@@ -630,12 +642,15 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
     totalDeckCards: session.variant.totalDeckCards,
     deadCards: session.deadCards.length,
     deckSummary: session.variant.deckSummary,
-    deckUniverseCards: session.deckUniverseCards.map(cardLabel),
+    deckUniverseCards: viewerFilteredUniverse(session, cleanViewer),
     remainingUniverseCards,
     playedUniverseCards: playedCardLabels(session),
     totalTricks: session.totalTricks,
     minimumContract: minimumContractForTricks(session.totalTricks),
     contractTricks: session.contractTricks,
+    contractOwner: session.contractOwner,
+    contractOwnerName: session.players[session.contractOwner],
+    sideTargets,
     trumpSuit: session.trumpSuit,
     bettingRounds: session.bettingRounds,
     nextRoundIndex: session.nextRoundIndex,
@@ -648,6 +663,9 @@ function snapshotPokerDoolSession(session, viewerPlayer = 0) {
     showdown: session.showdown,
     goalReached: session.goalReached,
     winningPlayer: session.winningPlayer,
+    winningPlayerName: session.winningPlayer === null ? null : session.players[session.winningPlayer],
+    lastTrickWinnerPlayer: lastCompletedTrick?.winnerPlayer ?? null,
+    lastTrickWinnerName: lastCompletedTrick ? session.players[lastCompletedTrick.winnerPlayer] : null,
     mucked: session.mucked,
     playStarted: session.playStarted,
     currentSeat: session.currentSeat,
@@ -752,7 +770,7 @@ function describeFoldNegotiation(session, viewerPlayer) {
 
 function visibleHands(session, viewerPlayer) {
   return session.hands.map((hand, seat) => {
-    if ((session.showdown && !session.mucked) || session.folded || sideForSeat(seat) === viewerPlayer) {
+    if ((session.showdown && !session.mucked) || sideForSeat(seat) === viewerPlayer) {
       return hand.map(cardLabel);
     }
 
@@ -767,7 +785,8 @@ function makeMessage(session) {
   }
 
   if (session.goalReached) {
-    return `${session.players[session.winningPlayer]} reached ${session.contractTricks} tricks. Remaining cards are mucked.`;
+    const target = contractTargetForPlayer(session, session.winningPlayer);
+    return `${session.players[session.winningPlayer]} reached ${target} tricks. Remaining cards stay hidden.`;
   }
 
   if (session.showdown) {
@@ -850,9 +869,25 @@ function maxSaveOffer(session, player) {
   return Math.max(0, Math.min(capRemaining, potRemaining, session.betting.stacks[player]));
 }
 
-function remainingCardsFromUniverse(session) {
-  const played = new Set(playedCardLabels(session));
-  return session.deckUniverseCards.map(cardLabel).filter((label) => !played.has(label));
+function remainingCardsFromUniverse(session, viewerPlayer) {
+  const unavailable = new Set([...playedCardLabels(session), ...viewerOwnCardLabels(session, viewerPlayer)]);
+  return session.deckUniverseCards.map(cardLabel).filter((label) => !unavailable.has(label));
+}
+
+function viewerFilteredUniverse(session, viewerPlayer) {
+  const ownCards = new Set(viewerOwnCardLabels(session, viewerPlayer));
+  return session.deckUniverseCards.map(cardLabel).filter((label) => !ownCards.has(label));
+}
+
+function viewerOwnCardLabels(session, viewerPlayer) {
+  const labels = [];
+
+  for (let seat = 0; seat < session.hands.length; seat += 1) {
+    if (sideForSeat(seat) !== viewerPlayer) continue;
+    labels.push(...session.hands[seat].map(cardLabel));
+  }
+
+  return labels;
 }
 
 function playedCardLabels(session) {
@@ -878,8 +913,8 @@ function winningTrickPlay(plays, trumpSuit) {
 }
 
 function cardBeats(challenger, currentWinner, leadSuit, trumpSuit) {
-  const challengerIsTrump = trumpSuit !== "NT" && challenger.suit === trumpSuit;
-  const winnerIsTrump = trumpSuit !== "NT" && currentWinner.suit === trumpSuit;
+  const challengerIsTrump = challenger.suit === trumpSuit;
+  const winnerIsTrump = currentWinner.suit === trumpSuit;
 
   if (challengerIsTrump && !winnerIsTrump) return true;
   if (!challengerIsTrump && winnerIsTrump) return false;
@@ -916,6 +951,14 @@ function seatLabel(seat) {
 function normalizePlayer(player) {
   const cleanPlayer = Number(player);
   return cleanPlayer === 1 ? 1 : 0;
+}
+
+function contractTargetForPlayer(session, player) {
+  const cleanPlayer = normalizePlayer(player);
+  const contractOwner = normalizePlayer(session.contractOwner);
+  const ownerTarget = Number(session.contractTricks);
+  const opponentTarget = Math.min(session.totalTricks, ownerTarget + 1);
+  return cleanPlayer === contractOwner ? ownerTarget : opponentTarget;
 }
 
 function roundLabel(trick) {

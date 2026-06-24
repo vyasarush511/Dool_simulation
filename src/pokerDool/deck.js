@@ -17,16 +17,17 @@ export const DEAL_STYLES = {
 };
 
 export const POKER_DOOL_VARIANTS = {
-  "36_52": {
-    id: "36_52",
-    label: "36 / 52",
-    name: "36 cards from 52",
-    totalDeckCards: 52,
-    dealtCards: 36,
-    cardsPerSeat: 9,
+  "32_42": {
+    id: "32_42",
+    label: "32 / 42",
+    name: "32 cards from a random 42-card universe",
+    totalDeckCards: 42,
+    dealtCards: 32,
+    cardsPerSeat: 8,
     ranks: RANKS,
-    bettingRounds: [0, 3, 5, 7, 8],
-    deckSummary: "Full 52-card deck: A, K, Q, J, 10, 9, 8, 7, 6, 5, 4, 3, 2 in each suit. Deal 36; 16 stay hidden.",
+    randomUniverseSize: 42,
+    bettingRounds: [0, 2, 4, 6, 7],
+    deckSummary: "Random 42-card universe sampled from the full 52-card deck. Deal 32; 10 universe cards stay hidden.",
   },
   "24_36": {
     id: "24_36",
@@ -42,8 +43,8 @@ export const POKER_DOOL_VARIANTS = {
   },
 };
 
-export function gameVariant(variantId = "36_52") {
-  return POKER_DOOL_VARIANTS[variantId] ?? POKER_DOOL_VARIANTS["36_52"];
+export function gameVariant(variantId = "32_42") {
+  return POKER_DOOL_VARIANTS[variantId] ?? POKER_DOOL_VARIANTS["32_42"];
 }
 
 export function dealStyle(styleId = "standard") {
@@ -62,7 +63,7 @@ export function makeDeck({ ranks = RANKS } = {}) {
   return deck;
 }
 
-export function dealPartialDeck({ variant = "36_52", cardsPerSeat = undefined, dealStyle: styleId = "standard", rng = cryptoRandom } = {}) {
+export function dealPartialDeck({ variant = "32_42", cardsPerSeat = undefined, dealStyle: styleId = "standard", rng = cryptoRandom } = {}) {
   const selectedVariant = gameVariant(variant);
   const selectedDealStyle = dealStyle(styleId);
   const handLength = cardsPerSeat ?? selectedVariant.cardsPerSeat;
@@ -150,6 +151,10 @@ function dealByPackets({ deck, hands, handLength, pattern }) {
 }
 
 function goulashPacketPattern(handLength, rng) {
+  if (handLength === 8) {
+    return rng() < 0.5 ? [5, 2, 1] : [4, 3, 1];
+  }
+
   if (handLength === 9) {
     return rng() < 0.5 ? [5, 3, 1] : [4, 4, 1];
   }

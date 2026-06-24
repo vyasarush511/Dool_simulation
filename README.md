@@ -28,7 +28,7 @@ EW bot controls seats 1 and 3
   - `src/game/exactDoubleDummy.js` is the exact minimax solver used for tractable late-game positions.
   - `src/game/twoSideSimulation.js` creates deals and runs complete two-side games.
   - `src/game/constants.js`, `actions.js`, and `stateClone.js` are shared helpers.
-  - `src/pokerDool/` contains the Poker-Dool prototype: 36/52 and 24/36 variants, betting rules, betting bot policy, hand evaluation, deck helpers, and replay/expose/muck logging.
+  - `src/pokerDool/` contains the Poker-Dool prototype: 32/42 and 24/36 variants, betting rules, betting bot policy, hand evaluation, deck helpers, and replay/hidden-card audit logging.
   - `src/analysis/` contains analysis scripts for card-count odds and poker-Dool betting structure.
 - `vendor/` contains the original game/card logic we copied in as local dependencies.
   - `vendor/dool-logic/index.js` is the core Dool state machine, bidding, deck setup, and scoring reference.
@@ -101,12 +101,12 @@ http://localhost:3000
 
 The browser opens on the Poker-Dool launch prototype. It is a two-player betting table with two variants:
 
-- `36 / 52`: full 52-card deck, 36 cards dealt, 9 cards per hand, 16 hidden.
+- `32 / 42`: randomly sample a 42-card universe from the full 52-card deck, deal 32 cards, 8 cards per hand, 10 universe cards hidden.
 - `24 / 36`: randomly sample a 36-card universe from the full 52-card deck, deal 24 cards, 6 cards per hand, 12 universe cards hidden.
 
 Each player controls two hands. Player 1 and Player 2 both see their own hands in the north/south positions on their own shared link, while the opponent's cards stay hidden. Cards are grouped by suit, trump and target tricks are chosen in the preflop betting round, and later betting windows open on the variant's scheduled trick cadence.
 
-The Poker-Dool table also keeps a live deck-universe rail visible throughout play. The rail starts with the full universe for the selected variant and removes cards as they are played, giving both players the same card-counting reference. Once either player reaches the selected target-trick goal, the hand stops immediately and unplayed cards are mucked instead of being exposed.
+The Poker-Dool table also keeps a live deck-universe rail visible throughout play. The rail shows the unknown universe for the viewer: their own cards are removed from the rail, and played cards disappear live. Once either player reaches their side-specific target-trick goal, the hand stops immediately and unplayed opponent cards stay hidden.
 
 For more volatile hands, the launch prototype supports a **Goulash** deal mode alongside the standard one-card-at-a-time deal. Goulash uses bridge-inspired packet patterns such as 5-5-3 / 4-5-4 scaled to the selected hand size, plus suit clustering, which creates more uneven distributions and more aggressive bidding spots. Completed tricks are stored in a trick-review rail so players can inspect exactly which four cards were played.
 
@@ -128,13 +128,13 @@ The Classic tab is still available as the earlier human-vs-bot Dool view. There 
 ## Poker-Dool prototype logic
 
 - `src/pokerDool/session.js` runs the live two-player betting hand.
-- `src/pokerDool/deck.js` defines the 36/52 and 24/36 deck variants, samples the random 36-card universe for 24/36, and supports both standard one-card dealing and bridge-inspired goulash packet dealing.
-- `src/pokerDool/bettingRules.js` defines table fee, ante, check/call/fold/bet/raise, max raises, max pot, and per-player commitment caps. The 36/52 game opens betting at preflop, trick 3, trick 5, trick 7, and trick 8; the 24/36 game opens at preflop, trick 2, trick 4, and trick 5.
-- `src/pokerDool/handEvaluation.js` gives the model estimate shown in the UI: HCP, best trump fit, no-trump winners, trump losers, strength, and win estimate.
-- Target-trick completion is terminal: as soon as a player reaches the selected goal, the session records the winner, stops card play, and mucks the remaining hands.
+- `src/pokerDool/deck.js` defines the 32/42 and 24/36 deck variants, samples a random universe for each game, and supports both standard one-card dealing and bridge-inspired goulash packet dealing.
+- `src/pokerDool/bettingRules.js` defines table fee, ante, check/call/fold/bet/raise, max raises, max pot, and per-player commitment caps. The 32/42 game opens betting at preflop, trick 2, trick 4, trick 6, and trick 7; the 24/36 game opens at preflop, trick 2, trick 4, and trick 5.
+- `src/pokerDool/handEvaluation.js` gives the model estimate shown in the UI: HCP, best trump fit, top-sequence winners, trump losers, strength, and win estimate.
+- Target-trick completion is terminal and asymmetric: if Player 1 bids 3 tricks, Player 1 needs 3 while Player 2 needs 4. As soon as either side reaches its target, the session records the winner and stops card play.
 - Ready to Fold is a negotiation feature in every betting window. During trump bidding it can negotiate target/trump; in later betting rounds it becomes a continue-offer mechanic before a player folds.
 - `src/pokerDool/bettingBot.js` is kept for simulations and future AI; the current launch UI is a two-human shared-room prototype, not bot-controlled.
-- `src/pokerDool/replayLog.js` tracks deal, betting, expose, muck, and showdown events for later replay/cash-out audit work.
+- `src/pokerDool/replayLog.js` tracks deal, betting, expose, hidden-card, and showdown events for later replay/cash-out audit work.
 
 ## Why not raw RL yet?
 

@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: dool-simulation
+    env: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    autoDeploy: true
