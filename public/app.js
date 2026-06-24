@@ -9,7 +9,12 @@ const suitSymbols = {
 const suitSortOrder = { S: 0, H: 1, D: 2, C: 3 };
 const rankSortOrder = { A: 0, K: 1, Q: 2, J: 3, "10": 4, "9": 5, "8": 6, "7": 7, "6": 8, "5": 9, "4": 10, "3": 11, "2": 12 };
 const renderApiBase = "https://dool-simulation.onrender.com";
-const apiBase = window.location.hostname.endsWith("github.io") ? renderApiBase : "";
+const tunnelApiBase = "https://spare-sponsored-sarah-recorder.trycloudflare.com";
+const apiOverride = new URLSearchParams(window.location.search).get("api");
+const apiBases = window.location.hostname.endsWith("github.io")
+  ? [apiOverride, renderApiBase, tunnelApiBase].filter(Boolean)
+  : [""];
+let activeApiBase = apiBases[0] ?? "";
 
 const state = {
   game: null,
@@ -424,18 +429,36 @@ async function runRequest(action) {
 }
 
 async function postJson(url, payload) {
-  const response = await fetch(`${apiBase}${url}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = await response.json();
+  const candidates = [...new Set([activeApiBase, ...apiBases])];
+  let lastError = null;
 
-  if (!response.ok) {
-    throw new Error(body.error ?? "Request failed");
+  for (const base of candidates) {
+    try {
+      const response = await fetch(`${base}${url}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const rawBody = await response.text();
+      const body = rawBody ? JSON.parse(rawBody) : {};
+
+      if (!response.ok) {
+        if ([404, 502, 503, 504].includes(response.status) && base !== candidates.at(-1)) {
+          lastError = new Error(body.error ?? `Backend unavailable at ${base || "local server"}`);
+          continue;
+        }
+        throw new Error(body.error ?? "Request failed");
+      }
+
+      activeApiBase = base;
+      return body;
+    } catch (error) {
+      lastError = error;
+      if (base === candidates.at(-1)) break;
+    }
   }
 
-  return body;
+  throw lastError ?? new Error("Failed to fetch");
 }
 
 function setBusy(busy) {
